@@ -79,6 +79,7 @@ tasks:
 
       # 4) Write updated file back to Namespace Files
       - id: upload_to_namespace
+        namespace: company.team
         type: io.kestra.plugin.core.namespace.UploadFiles
         filesMap:
           "{{ vars.ns_inventory_path }}": "{{ vars.ns_inventory_path }}"
