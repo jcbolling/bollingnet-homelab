@@ -1,0 +1,42 @@
+name: Validate and deploy Kestra flows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate Kestra flows
+    steps:
+      - name: Checkout repository content
+        uses: actions/checkout@v4
+
+      - name: Validate flows on server-side
+        uses: kestra-io/validate-action@develop
+        with:
+          directory: ./kestra/flows
+          user: ${{ secrets.KESTRA_USERNAME }}
+          password: ${{ secrets.KESTRA_PASSWORD }}
+          resource: flow
+          server: ${{ secrets.KESTRA_HOSTNAME }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy Kestra flows
+    needs: validate
+    steps:
+      - name: Checkout repository content
+        uses: actions/checkout@v4
+
+      # Deploy to product namespace
+      - name: Deploy product flows
+        uses: kestra-io/deploy-action@master
+        with:
+          namespace: company.team
+          user: ${{ secrets.KESTRA_USERNAME }}
+          password: ${{ secrets.KESTRA_PASSWORD }}
+          directory: ./kestra/flows/
+          resource: flow
+          server: ${{ secrets.KESTRA_HOSTNAME }}
