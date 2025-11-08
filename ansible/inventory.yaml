@@ -1,0 +1,6 @@
+all:
+  hosts:
+    bn-kube-01.int.bollingnet.net:
+    bn-kube-02.int.bollingnet.net:
+    bn-kube-03.int.bollingnet.net:
+    bn-kube-04.int.bollingnet.net:
