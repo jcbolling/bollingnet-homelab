@@ -38,6 +38,9 @@ services:
             driverClassName: org.postgresql.Driver
             username: ${POSTGRES_USER}
             password: ${POSTGRES_PASSWORD}
+            GIT_USERNAME: ${GIT_USERNAME}
+            GIT_TOKEN: ${GIT_TOKEN}
+            WEBHOOK_KEY: ${WEBHOOK_KEY}
         kestra:
           # server:
           #   basicAuth:
