@@ -25,13 +25,6 @@ tasks:
         files:
           - "{{ vars.ns_inventory_path }}"
         allowFailure: true
-        onFailure:
-          - id: init_empty
-            type: io.kestra.plugin.core.storage.Write
-            content: |
-              all:
-                hosts:
-            destination: "{{ vars.ns_inventory_path }}"
 
       # 2) Upsert hostname (no ansible_host; DNS will resolve it)
       - id: upsert_yaml
