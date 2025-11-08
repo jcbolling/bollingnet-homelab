@@ -1,0 +1,157 @@
+id: register-host-in-ansible-inventory
+namespace: company.team
+
+variables:
+  git_url: https://github.com/jcbolling/bollingnet-homelab.git
+  target_branch: main
+  commit_author_name: "Kestra Bot"
+  commit_author_email: "kestra-bot@bollingnet.local"
+
+tasks:
+  - id: set_vars
+    type: io.kestra.plugin.core.execution.SetVariables
+    variables:
+      host: "{{ trigger.body.hostname }}"
+      feature_branch: "inv/add-{{ trigger.body.hostname | replace({'.':'-'}) | lower }}-{{ execution.id | slice(0, 8) }}"
+
+  - id: work
+    type: io.kestra.plugin.core.flow.WorkingDirectory
+    tasks:
+      # 1) Pull current file from Namespace Files (ok if missing)
+      - id: fetch_from_namespace
+        type: io.kestra.plugin.core.namespace.DownloadFiles
+        namespace: "{{ flow.namespace }}"
+        files:
+          - "ansible/inventory.yaml"
+        allowFailure: true
+
+      # 2) Upsert hostname into local working-dir file and show it
+      - id: upsert_yaml
+        type: io.kestra.plugin.scripts.shell.Commands
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          image: python:3.11-alpine
+        env:
+          INV: "ansible/inventory.yaml"     # local path (literal)
+          HOSTNAME: "{{ vars.host }}"
+        commands:
+          - |
+            set -euo pipefail
+            python -m pip install --no-cache-dir --upgrade pip ruamel.yaml
+            mkdir -p "$(dirname "$INV")"
+
+            python - <<'PY'
+            import os, pathlib
+            from ruamel.yaml import YAML
+            from ruamel.yaml.comments import CommentedMap
+
+            inv_path = pathlib.Path(os.environ["INV"])
+            host = os.environ["HOSTNAME"]
+
+            yaml = YAML()
+            yaml.indent(mapping=2, sequence=4, offset=2)
+
+            data = CommentedMap()
+            if inv_path.exists() and inv_path.stat().st_size > 0:
+                with inv_path.open("r") as f:
+                    data = yaml.load(f) or CommentedMap()
+
+            data.setdefault("all", CommentedMap())
+            data["all"].setdefault("hosts", CommentedMap())
+            data["all"]["hosts"].setdefault(host, CommentedMap())
+
+            inv_path.parent.mkdir(parents=True, exist_ok=True)
+            with inv_path.open("w") as f:
+                yaml.dump(data, f)
+            PY
+
+            echo "== after upsert =="
+            ls -la "$(dirname "$INV")" || true
+            echo "---"
+            sed -n '1,200p' "$INV" || true
+
+      # 3) Upload updated file to Namespace Files
+      - id: upload_to_namespace
+        type: io.kestra.plugin.core.namespace.UploadFiles
+        namespace: "{{ flow.namespace }}"
+        filesMap:
+          "ansible/inventory.yaml": "ansible/inventory.yaml"   # literal keys
+
+      # 3.5) DEBUG: Re-download from Namespace Files to prove it's there
+      - id: verify_namespace_file
+        type: io.kestra.plugin.core.namespace.DownloadFiles
+        namespace: "{{ flow.namespace }}"
+        files:
+          - "ansible/inventory.yaml"
+
+      - id: show_namespace_file
+        type: io.kestra.plugin.scripts.shell.Commands
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          image: bash:5.2
+        commands:
+          - |
+            set -euo pipefail
+            echo "== namespace file echoed back =="
+            ls -la ansible || true
+            echo "--- inventory.yaml (from namespace) ---"
+            sed -n '1,200p' ansible/inventory.yaml || true
+
+      # 4) Validate with ansible-inventory (Namespace Files mounted)
+      - id: ansible_inventory_check
+        type: io.kestra.plugin.ansible.cli.AnsibleCLI
+        containerImage: cytopia/ansible:latest-tools
+        namespaceFiles:
+          enabled: true
+          include:
+            - "ansible/inventory.yaml"
+        outputFiles:
+          - ansible-inventory.json
+        commands:
+          - |
+            set -euo pipefail
+            test -f "ansible/inventory.yaml" || { echo "Inventory not mounted"; ls -la ansible || true; exit 1; }
+            echo "== mounted namespace files =="
+            ls -la ansible || true
+            echo "--- inventory.yaml ---"
+            sed -n '1,200p' ansible/inventory.yaml || true
+            ansible-inventory -i "ansible/inventory.yaml" --list | tee ansible-inventory.json
+
+  # 5) Push just this file to a feature branch via PushNamespaceFiles
+  - id: push_namespace_files_to_git
+    type: io.kestra.plugin.git.PushNamespaceFiles
+    namespace: "{{ flow.namespace }}"
+    files: "**"
+    gitDirectory: "."
+    url: "https://github.com/jcbolling/bollingnet-homelab"
+    branch: "{{ vars.feature_branch }}"
+    username: "{{ secret('GIT_USERNAME') }}"
+    password: "{{ secret('GIT_TOKEN') }}"
+    authorName: "Kestra-Bot"
+    authorEmail: "kestra-bot@bollingnet.net"
+    commitMessage: "inventory: add {{ vars.host }}"
+    delete: false
+    errorOnMissing: true
+
+  # 6) Open a PR embedding ansible-inventory output
+  - id: open_pr
+    type: io.kestra.plugin.github.pulls.Create
+    oauthToken: "{{ secret('GIT_TOKEN') }}"
+    repository: "jcbolling/bollingnet-homelab"
+    sourceBranch: "{{ vars.feature_branch }}"
+    targetBranch: "main" 
+    title: "Add {{ vars.host }} to inventory"
+    body: |
+      This PR was created by Kestra.
+
+      **Host:** `{{ vars.host }}`
+
+      ### `ansible-inventory --list` (JSON)
+      ```json
+      {{ read(outputs.ansible_inventory_check.outputFiles["ansible-inventory.json"]) }}
+      ```
+
+triggers:
+  - id: webhook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: OGNmMDA5ODBlMzc1MGI0NmM5YTRjM2FkZjRiZDZhZTYwNDZkZGE1ODJlOWM3MWMzYTRkMTAzOThiOGExOTk0Ng==
