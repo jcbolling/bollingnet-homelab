@@ -13,42 +13,57 @@ jobs:
       - name: Checkout repository content
         uses: actions/checkout@v4
 
-      - name: List candidate files (debug)
+      - name: Build filtered flows directory
         run: |
-          echo "=== ./kestra/flows tree ==="
-          ls -laR ./kestra/flows || true
+          set -eu
+          rm -rf ./.flows_filtered
+          mkdir -p ./.flows_filtered
+          # Copy only *.yml / *.yaml from ./kestra/flows (preserve folders)
+          rsync -a \
+            --include='*/' \
+            --include='*.yml' \
+            --include='*.yaml' \
+            --exclude='*' \
+            ./kestra/flows/ ./.flows_filtered/
 
-      - name: Validate flows (local, strict globs)
-        uses: kestra-io/validate-action@master
+          echo "== filtered content =="
+          find ./.flows_filtered -type f | sort
+
+      - name: Validate flows on server-side
+        uses: kestra-io/validate-action@develop
         with:
-          path: ./kestra/flows
-          include: |
-            **/*.yml
-            **/*.yaml
-          exclude: |
-            **/inventory.yaml
-            ansible/**
-            **/*.example.yaml
+          directory: ./.flows_filtered
+          user: ${{ secrets.KESTRA_USERNAME }}
+          password: ${{ secrets.KESTRA_PASSWORD }}
+          resource: flow
+          server: ${{ secrets.KESTRA_HOSTNAME }}
 
   deploy:
     runs-on: ubuntu-latest
-    needs: validate
     name: Deploy Kestra flows
+    needs: validate
     steps:
       - name: Checkout repository content
         uses: actions/checkout@v4
 
-      - name: Deploy product flows (only real flow files)
+      - name: Build filtered flows directory (same as validate)
+        run: |
+          set -eu
+          rm -rf ./.flows_filtered
+          mkdir -p ./.flows_filtered
+          rsync -a \
+            --include='*/' \
+            --include='*.yml' \
+            --include='*.yaml' \
+            --exclude='*' \
+            ./kestra/flows/ ./.flows_filtered/
+
+      - name: Deploy product flows
         uses: kestra-io/deploy-action@master
         with:
-          server: ${{ secrets.KESTRA_HOSTNAME }}
-          username: ${{ secrets.KESTRA_USERNAME }}
-          password: ${{ secrets.KESTRA_PASSWORD }}
           namespace: company.team
-          path: ./kestra/flows
-          include: |
-            **/*.yml
-            **/*.yaml
-          exclude: |
-            **/inventory.yaml
-            ansible/**
+          user: ${{ secrets.KESTRA_USERNAME }}
+          password: ${{ secrets.KESTRA_PASSWORD }}
+          directory: ./.flows_filtered
+          resource: flow
+          server: ${{ secrets.KESTRA_HOSTNAME }}
