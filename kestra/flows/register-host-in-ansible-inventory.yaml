@@ -5,7 +5,7 @@ tasks:
   - id: set_vars
     type: io.kestra.plugin.core.execution.SetVariables
     variables:
-      git_url: "https://github.com/jcbollingnet-homelab.git"
+      git_url: "https://github.com/jcbolling/bollingnet-homelab.git"   # fixed path
       target_branch: "main"
       commit_author_name: "Kestra Bot"
       commit_author_email: "kestra-bot@bollingnet.local"
@@ -15,6 +15,7 @@ tasks:
       repo_dir: "repo-{{ execution.id | slice(0, 8) }}"
       bootstrap_dir: "repo-bootstrap"
 
+      # Keep 'inventory.yaml' out of parsed fields; use .yml internally
       inv_ns_path: "ansible/inventory.yml"
 
   - id: work
@@ -95,7 +96,7 @@ tasks:
             hosts = data["all"]["hosts"]
 
             if host not in hosts:
-                hosts[host] = None  # emits "host:" (no "{}")
+                hosts[host] = None   # emits "host:" (no "{}")
 
             with inv_path.open("w") as f:
                 yaml.dump(data, f)
@@ -182,10 +183,8 @@ tasks:
 
       **Host:** `{{ vars.host }}`
 
-      ### `ansible-inventory --list` (JSON)
-      ```json
-      {{ read(outputs.ansible_inventory_check.outputFiles["ansible-inventory.json"]) }}
-      ```
+      Ansible inventory was updated and validated by the workflow.
+      The full `ansible-inventory --list` JSON is available in the Kestra execution as `ansible-inventory.json`.
 
 triggers:
   - id: webhook
