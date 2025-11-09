@@ -7,8 +7,12 @@ on:
 
 env:
   FLOW_FILE: ./kestra/flows/register-host-in-ansible-inventory.yaml
-  # Example: https://kestra.yourdomain.tld (must include scheme)
+  # Must include scheme, e.g. https://kestra.example.com
   KESTRA_SERVER: ${{ secrets.KESTRA_HOSTNAME }}
+  # Map secrets to env so we can use them in `if:` expressions
+  KESTRA_USERNAME: ${{ secrets.KESTRA_USERNAME }}
+  KESTRA_PASSWORD: ${{ secrets.KESTRA_PASSWORD }}
+  KESTRA_TOKEN:    ${{ secrets.KESTRA_TOKEN }}
 
 jobs:
   validate:
@@ -50,6 +54,7 @@ jobs:
           python - <<'PY'
           import pathlib
           p = pathlib.Path("${{ env.FLOW_FILE }}")
+          if not p.exists(): raise SystemExit("Flow file missing")
           b = p.read_bytes()
           if b.startswith(b"\xef\xbb\xbf"):
               p.write_bytes(b[3:])
@@ -58,13 +63,13 @@ jobs:
               print("No BOM present.")
           PY
 
-      # ---- Deploy via Basic Auth (if username & password provided) ----
+      # ---- Deploy via Basic Auth (when both username & password are set) ----
       - name: Deploy via Kestra API (Basic Auth)
-        if: ${{ secrets.KESTRA_USERNAME != '' && secrets.KESTRA_PASSWORD != '' }}
+        if: ${{ env.KESTRA_USERNAME != '' && env.KESTRA_PASSWORD != '' }}
         run: |
           set -eu
           http_code=$(curl -sS -o /tmp/kestra_deploy.json -w '%{http_code}' \
-            -u "${{ secrets.KESTRA_USERNAME }}:${{ secrets.KESTRA_PASSWORD }}" \
+            -u "${KESTRA_USERNAME}:${KESTRA_PASSWORD}" \
             -H "Content-Type: application/x-yaml" \
             --data-binary @"$FLOW_FILE" \
             "$KESTRA_SERVER/api/v1/main/flows")
@@ -75,13 +80,13 @@ jobs:
             *) echo "Deploy failed (HTTP $http_code)"; exit 1;;
           esac
 
-      # ---- Deploy via Token (if token provided and no basic creds) ----
+      # ---- Deploy via Token (when no basic creds but a token is set) ----
       - name: Deploy via Kestra API (Token)
-        if: ${{ secrets.KESTRA_USERNAME == '' && secrets.KESTRA_PASSWORD == '' && secrets.KESTRA_TOKEN != '' }}
+        if: ${{ env.KESTRA_USERNAME == '' && env.KESTRA_PASSWORD == '' && env.KESTRA_TOKEN != '' }}
         run: |
           set -eu
           http_code=$(curl -sS -o /tmp/kestra_deploy.json -w '%{http_code}' \
-            -H "Authorization: Bearer ${{ secrets.KESTRA_TOKEN }}" \
+            -H "Authorization: Bearer ${KESTRA_TOKEN}" \
             -H "Content-Type: application/x-yaml" \
             --data-binary @"$FLOW_FILE" \
             "$KESTRA_SERVER/api/v1/main/flows")
@@ -92,9 +97,9 @@ jobs:
             *) echo "Deploy failed (HTTP $http_code)"; exit 1;;
           esac
 
-      # ---- Guardrail if no auth provided at all ----
+      # ---- Guardrail if no credentials provided at all ----
       - name: Fail if no credentials provided
-        if: ${{ (secrets.KESTRA_USERNAME == '' || secrets.KESTRA_PASSWORD == '') && secrets.KESTRA_TOKEN == '' }}
+        if: ${{ (env.KESTRA_USERNAME == '' || env.KESTRA_PASSWORD == '') && env.KESTRA_TOKEN == '' }}
         run: |
           echo "No credentials provided. Set either KESTRA_USERNAME + KESTRA_PASSWORD or KESTRA_TOKEN as repository secrets."
           exit 1
