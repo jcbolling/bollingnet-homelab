@@ -1,7 +1,7 @@
 id: register-host-in-ansible-inventory
 namespace: company.team
 
-# Adding a comment
+# This comment was added to verify explicit delete/update workaround from GitHub Action
 
 tasks:
   - id: set_vars
