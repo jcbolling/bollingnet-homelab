@@ -5,29 +5,30 @@ tasks:
   - id: set_vars
     type: io.kestra.plugin.core.execution.SetVariables
     variables:
-      git_url: "https://github.com/jcbolling/bollingnet-homelab.git"   # fixed path
+      # ----- repo & PR settings -----
+      git_url: "https://github.com/jcbolling/bollingnet-homelab.git"
       target_branch: "main"
       commit_author_name: "Kestra Bot"
       commit_author_email: "kestra-bot@bollingnet.local"
 
+      # ----- request-derived + runtime vars -----
       host: "{{ trigger.body.hostname }}"
       feature_branch: "inv/add-{{ trigger.body.hostname | replace({'.':'-'}) | lower }}-{{ execution.id | slice(0, 8) }}"
-      repo_dir: "repo-{{ execution.id | slice(0, 8) }}"
-      bootstrap_dir: "repo-bootstrap"
-
-      # Keep 'inventory.yaml' out of parsed fields; use .yml internally
-      inv_ns_path: "ansible/inventory.yml"
+      repo_dir: "repo-{{ execution.id | slice(0, 8) }}"          # clean per-run checkout
+      bootstrap_dir: "repo-bootstrap"                             # small clone just for fallback
 
   - id: work
     type: io.kestra.plugin.core.flow.WorkingDirectory
     tasks:
+      # 1) Try to pull the current inventory from Namespace Files (ok if missing)
       - id: fetch_from_namespace
         type: io.kestra.plugin.core.namespace.DownloadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - "ansible/**"
+          - "ansible/inventory.yaml"
         allowFailure: true
 
+      # 2) Always clone the repo to bootstrap_dir (fast, used only if file missing)
       - id: git_clone_bootstrap
         type: io.kestra.plugin.git.Clone
         url: "{{ vars.git_url }}"
@@ -36,46 +37,50 @@ tasks:
         username: "{{ secret('GIT_USERNAME') }}"
         password: "{{ secret('GIT_TOKEN') }}"
 
+      # 3) If workspace doesn't have inventory yet, copy from bootstrap; otherwise keep what we have.
+      #    If neither source exists, create a minimal safe skeleton.
       - id: bootstrap_inventory_if_missing
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
           - |
             set -eu
-            if [ -f "{{ vars.inv_ns_path }}" ]; then
-              echo "Inventory present from Namespace Files: {{ vars.inv_ns_path }}"
+            if [ -f "ansible/inventory.yaml" ]; then
+              echo "Inventory present from Namespace Files; keeping it."
             else
-              echo "Inventory missing; bootstrapping from repo if possible."
-              mkdir -p "$(dirname "{{ vars.inv_ns_path }}")"
+              echo "Inventory missing in workspace; attempting bootstrap from Git clone."
               if [ -f "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" ]; then
-                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" "{{ vars.inv_ns_path }}"
-                echo "Bootstrapped from repo inventory.yaml -> {{ vars.inv_ns_path }}"
-              elif [ -f "{{ vars.bootstrap_dir }}/ansible/inventory.yml" ]; then
-                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yml" "{{ vars.inv_ns_path }}"
-                echo "Bootstrapped from repo inventory.yml -> {{ vars.inv_ns_path }}"
+                mkdir -p ansible
+                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" "ansible/inventory.yaml"
+                echo "Bootstrapped inventory from repo."
               else
-                printf "all:\n  hosts:\n" > "{{ vars.inv_ns_path }}"
-                echo "Created minimal skeleton at {{ vars.inv_ns_path }}"
+                echo "No inventory.yaml found in repo; creating skeleton to avoid clobber."
+                mkdir -p ansible
+                printf "all:\n  hosts:\n" > ansible/inventory.yaml
               fi
             fi
-            echo "== BEFORE upsert =="
-            sed -n '1,200p' "{{ vars.inv_ns_path }}" || true
+            echo "== inventory.yaml BEFORE upsert =="
+            sed -n '1,200p' ansible/inventory.yaml || true
 
+      # 4) Upsert new host (refuse to clobber if nothing valid was loaded; emit host without `{}`)
       - id: upsert_yaml
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
           image: python:3.11-alpine
+        env:
+          INV: "ansible/inventory.yaml"
+          HOSTNAME: "{{ vars.host }}"
         commands:
           - |
             set -euo pipefail
             python -m pip install --no-cache-dir --upgrade pip ruamel.yaml
             python - <<'PY'
-            import pathlib, sys
+            import os, sys, pathlib
             from ruamel.yaml import YAML
             from ruamel.yaml.comments import CommentedMap
 
-            inv_path = pathlib.Path("{{ vars.inv_ns_path }}")
-            host = "{{ vars.host }}"
+            inv_path = pathlib.Path(os.environ["INV"])
+            host = os.environ["HOSTNAME"]
 
             if not inv_path.exists() or inv_path.stat().st_size == 0:
                 print(f"[FATAL] Inventory not loaded before upsert: {inv_path}", file=sys.stderr)
@@ -91,46 +96,52 @@ tasks:
                 print("[FATAL] Inventory is not a mapping; refusing to overwrite", file=sys.stderr)
                 sys.exit(11)
 
+            # Ensure base structure exists without touching anything else
             data.setdefault("all", CommentedMap())
             data["all"].setdefault("hosts", CommentedMap())
+
             hosts = data["all"]["hosts"]
 
+            # Add only if missing; set to None to emit "host:" (no "{}")
             if host not in hosts:
-                hosts[host] = None   # emits "host:" (no "{}")
+                hosts[host] = None
 
+            inv_path.parent.mkdir(parents=True, exist_ok=True)
             with inv_path.open("w") as f:
                 yaml.dump(data, f)
             PY
 
-            echo "== AFTER upsert =="
-            sed -n '1,200p' "{{ vars.inv_ns_path }}" || true
+            echo "== inventory.yaml AFTER upsert =="
+            sed -n '1,200p' ansible/inventory.yaml || true
 
+      # 5) (Optional) Upload updated file to Namespace Files (keeps your canonical copy there)
       - id: upload_to_namespace
         type: io.kestra.plugin.core.namespace.UploadFiles
         namespace: "{{ flow.namespace }}"
-        files:
-          - to: "{{ vars.inv_ns_path }}"
-            from: "{{ vars.inv_ns_path }}"
+        filesMap:
+          "ansible/inventory.yaml": "ansible/inventory.yaml"
 
+      # 6) Validate with ansible-inventory (Namespace Files mounted)
       - id: ansible_inventory_check
         type: io.kestra.plugin.ansible.cli.AnsibleCLI
         containerImage: cytopia/ansible:latest-tools
         namespaceFiles:
           enabled: true
           include:
-            - "ansible/**"
+            - "ansible/inventory.yaml"
         outputFiles:
           - ansible-inventory.json
         commands:
           - |
             set -euo pipefail
-            test -f "{{ vars.inv_ns_path }}" || { echo "Inventory not mounted: {{ vars.inv_ns_path }}"; ls -la ansible || true; exit 1; }
+            test -f "ansible/inventory.yaml" || { echo "Inventory not mounted"; ls -la ansible || true; exit 1; }
             echo "== mounted namespace files =="
             ls -la ansible || true
-            echo "--- {{ vars.inv_ns_path }} ---"
-            sed -n '1,200p' "{{ vars.inv_ns_path }}" || true
-            ansible-inventory -i "{{ vars.inv_ns_path }}" --list | tee ansible-inventory.json
+            echo "--- inventory.yaml ---"
+            sed -n '1,200p' ansible/inventory.yaml || true
+            ansible-inventory -i "ansible/inventory.yaml" --list | tee ansible-inventory.json
 
+      # 7) Ensure a clean repo dir, then clone, copy, commit, and push to feature branch
       - id: ensure_empty_repo_dir
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
@@ -147,16 +158,15 @@ tasks:
         username: "{{ secret('GIT_USERNAME') }}"
         password: "{{ secret('GIT_TOKEN') }}"
 
-      - id: copy_into_repo_with_rename
+      - id: copy_into_repo
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
           - |
             set -eu
-            echo "== copying {{ vars.inv_ns_path }} into repo checkout as inventory.yaml =="
-            test -f "{{ vars.inv_ns_path }}" || { echo "missing {{ vars.inv_ns_path }}"; exit 1; }
+            echo "== copying ansible/inventory.yaml into repo checkout =="
+            test -f "ansible/inventory.yaml" || { echo "missing local ansible/inventory.yaml"; exit 1; }
             mkdir -p "{{ vars.repo_dir }}/ansible"
-            cp -v "{{ vars.inv_ns_path }}" "{{ vars.repo_dir }}/ansible/inventory.yaml"
-            git -C "{{ vars.repo_dir }}" add "ansible/inventory.yaml"
+            cp -v "ansible/inventory.yaml" "{{ vars.repo_dir }}/ansible/inventory.yaml"
             echo "== repo tree after copy =="
             find "{{ vars.repo_dir }}" -maxdepth 3 -type f | sort
 
@@ -170,7 +180,10 @@ tasks:
         author:
           name: "{{ vars.commit_author_name }}"
           email: "{{ vars.commit_author_email }}"
+        addFilesPattern:
+          - "ansible/inventory.yaml"
 
+  # 8) Open a PR embedding ansible-inventory output
   - id: open_pr
     type: io.kestra.plugin.github.pulls.Create
     oauthToken: "{{ secret('GIT_TOKEN') }}"
@@ -183,8 +196,10 @@ tasks:
 
       **Host:** `{{ vars.host }}`
 
-      Ansible inventory was updated and validated by the workflow.
-      The full `ansible-inventory --list` JSON is available in the Kestra execution as `ansible-inventory.json`.
+      ### `ansible-inventory --list` (JSON)
+      ```json
+      {{ read(outputs.ansible_inventory_check.outputFiles["ansible-inventory.json"]) }}
+      ```
 
 triggers:
   - id: webhook
