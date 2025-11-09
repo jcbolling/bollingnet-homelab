@@ -13,30 +13,42 @@ jobs:
       - name: Checkout repository content
         uses: actions/checkout@v4
 
-      - name: Validate flows on server-side
-        uses: kestra-io/validate-action@develop
+      - name: List candidate files (debug)
+        run: |
+          echo "=== ./kestra/flows tree ==="
+          ls -laR ./kestra/flows || true
+
+      - name: Validate flows (local, strict globs)
+        uses: kestra-io/action-validate@v2
         with:
-          directory: ./kestra/flows
-          user: ${{ secrets.KESTRA_USERNAME }}
-          password: ${{ secrets.KESTRA_PASSWORD }}
-          resource: flow
-          server: ${{ secrets.KESTRA_HOSTNAME }}
+          path: ./kestra/flows
+          include: |
+            **/*.yml
+            **/*.yaml
+          exclude: |
+            **/inventory.yaml
+            ansible/**
+            **/*.example.yaml
 
   deploy:
     runs-on: ubuntu-latest
-    name: Deploy Kestra flows
     needs: validate
+    name: Deploy Kestra flows
     steps:
       - name: Checkout repository content
         uses: actions/checkout@v4
 
-      # Deploy to product namespace
-      - name: Deploy product flows
-        uses: kestra-io/deploy-action@master
+      - name: Deploy product flows (only real flow files)
+        uses: kestra-io/action-deploy@v2
         with:
-          namespace: company.team
-          user: ${{ secrets.KESTRA_USERNAME }}
-          password: ${{ secrets.KESTRA_PASSWORD }}
-          directory: ./kestra/flows/
-          resource: flow
           server: ${{ secrets.KESTRA_HOSTNAME }}
+          username: ${{ secrets.KESTRA_USERNAME }}
+          password: ${{ secrets.KESTRA_PASSWORD }}
+          namespace: company.team
+          path: ./kestra/flows
+          include: |
+            **/*.yml
+            **/*.yaml
+          exclude: |
+            **/inventory.yaml
+            ansible/**
