@@ -5,7 +5,7 @@ tasks:
   - id: set_vars
     type: io.kestra.plugin.core.execution.SetVariables
     variables:
-      git_url: "https://github.com/jcbolling/bollingnet-homelab.git"
+      git_url: "https://github.com/jcbollingnet-homelab.git"
       target_branch: "main"
       commit_author_name: "Kestra Bot"
       commit_author_email: "kestra-bot@bollingnet.local"
@@ -37,50 +37,44 @@ tasks:
 
       - id: bootstrap_inventory_if_missing
         type: io.kestra.plugin.scripts.shell.Commands
-        env:
-          INV_NS_PATH: "{{ vars.inv_ns_path }}"
-          BOOTSTRAP_DIR: "{{ vars.bootstrap_dir }}"
         commands:
           - |
             set -eu
-            if [ -f "$INV_NS_PATH" ]; then
-              echo "Inventory present from Namespace Files: $INV_NS_PATH"
+            if [ -f "{{ vars.inv_ns_path }}" ]; then
+              echo "Inventory present from Namespace Files: {{ vars.inv_ns_path }}"
             else
               echo "Inventory missing; bootstrapping from repo if possible."
-              mkdir -p "$(dirname "$INV_NS_PATH")"
-              if [ -f "$BOOTSTRAP_DIR/ansible/inventory.yaml" ]; then
-                cp -v "$BOOTSTRAP_DIR/ansible/inventory.yaml" "$INV_NS_PATH"
-                echo "Bootstrapped from repo inventory.yaml -> $INV_NS_PATH"
-              elif [ -f "$BOOTSTRAP_DIR/ansible/inventory.yml" ]; then
-                cp -v "$BOOTSTRAP_DIR/ansible/inventory.yml" "$INV_NS_PATH"
-                echo "Bootstrapped from repo inventory.yml -> $INV_NS_PATH"
+              mkdir -p "$(dirname "{{ vars.inv_ns_path }}")"
+              if [ -f "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" ]; then
+                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" "{{ vars.inv_ns_path }}"
+                echo "Bootstrapped from repo inventory.yaml -> {{ vars.inv_ns_path }}"
+              elif [ -f "{{ vars.bootstrap_dir }}/ansible/inventory.yml" ]; then
+                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yml" "{{ vars.inv_ns_path }}"
+                echo "Bootstrapped from repo inventory.yml -> {{ vars.inv_ns_path }}"
               else
-                printf "all:\n  hosts:\n" > "$INV_NS_PATH"
-                echo "No inventory file in repo; created skeleton at $INV_NS_PATH"
+                printf "all:\n  hosts:\n" > "{{ vars.inv_ns_path }}"
+                echo "Created minimal skeleton at {{ vars.inv_ns_path }}"
               fi
             fi
             echo "== BEFORE upsert =="
-            sed -n '1,200p' "$INV_NS_PATH" || true
+            sed -n '1,200p' "{{ vars.inv_ns_path }}" || true
 
       - id: upsert_yaml
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
           image: python:3.11-alpine
-        env:
-          INV: "{{ vars.inv_ns_path }}"
-          HOSTNAME: "{{ vars.host }}"
         commands:
           - |
             set -euo pipefail
             python -m pip install --no-cache-dir --upgrade pip ruamel.yaml
             python - <<'PY'
-            import os, sys, pathlib
+            import pathlib, sys
             from ruamel.yaml import YAML
             from ruamel.yaml.comments import CommentedMap
 
-            inv_path = pathlib.Path(os.environ["INV"])
-            host = os.environ["HOSTNAME"]
+            inv_path = pathlib.Path("{{ vars.inv_ns_path }}")
+            host = "{{ vars.host }}"
 
             if not inv_path.exists() or inv_path.stat().st_size == 0:
                 print(f"[FATAL] Inventory not loaded before upsert: {inv_path}", file=sys.stderr)
@@ -98,10 +92,10 @@ tasks:
 
             data.setdefault("all", CommentedMap())
             data["all"].setdefault("hosts", CommentedMap())
-
             hosts = data["all"]["hosts"]
+
             if host not in hosts:
-                hosts[host] = None   # emit "host:" (no "{}")
+                hosts[host] = None  # emits "host:" (no "{}")
 
             with inv_path.open("w") as f:
                 yaml.dump(data, f)
@@ -126,17 +120,15 @@ tasks:
             - "ansible/**"
         outputFiles:
           - ansible-inventory.json
-        env:
-          INV_NS_PATH: "{{ vars.inv_ns_path }}"
         commands:
           - |
             set -euo pipefail
-            test -f "$INV_NS_PATH" || { echo "Inventory not mounted: $INV_NS_PATH"; ls -la ansible || true; exit 1; }
+            test -f "{{ vars.inv_ns_path }}" || { echo "Inventory not mounted: {{ vars.inv_ns_path }}"; ls -la ansible || true; exit 1; }
             echo "== mounted namespace files =="
             ls -la ansible || true
-            echo "--- $INV_NS_PATH ---"
-            sed -n '1,200p' "$INV_NS_PATH" || true
-            ansible-inventory -i "$INV_NS_PATH" --list | tee ansible-inventory.json
+            echo "--- {{ vars.inv_ns_path }} ---"
+            sed -n '1,200p' "{{ vars.inv_ns_path }}" || true
+            ansible-inventory -i "{{ vars.inv_ns_path }}" --list | tee ansible-inventory.json
 
       - id: ensure_empty_repo_dir
         type: io.kestra.plugin.scripts.shell.Commands
@@ -156,20 +148,16 @@ tasks:
 
       - id: copy_into_repo_with_rename
         type: io.kestra.plugin.scripts.shell.Commands
-        env:
-          INV_NS_PATH: "{{ vars.inv_ns_path }}"
-          REPO_DIR: "{{ vars.repo_dir }}"
         commands:
           - |
             set -eu
-            echo "== copying $INV_NS_PATH into repo checkout as inventory.yaml =="
-            test -f "$INV_NS_PATH" || { echo "missing $INV_NS_PATH"; exit 1; }
-            mkdir -p "$REPO_DIR/ansible"
-            cp -v "$INV_NS_PATH" "$REPO_DIR/ansible/inventory.yaml"
+            echo "== copying {{ vars.inv_ns_path }} into repo checkout as inventory.yaml =="
+            test -f "{{ vars.inv_ns_path }}" || { echo "missing {{ vars.inv_ns_path }}"; exit 1; }
+            mkdir -p "{{ vars.repo_dir }}/ansible"
+            cp -v "{{ vars.inv_ns_path }}" "{{ vars.repo_dir }}/ansible/inventory.yaml"
+            git -C "{{ vars.repo_dir }}" add "ansible/inventory.yaml"
             echo "== repo tree after copy =="
-            find "$REPO_DIR" -maxdepth 3 -type f | sort
-            # Stage the exact file to keep commit minimal
-            git -C "$REPO_DIR" add "ansible/inventory.yaml"
+            find "{{ vars.repo_dir }}" -maxdepth 3 -type f | sort
 
       - id: git_push
         type: io.kestra.plugin.git.Push
