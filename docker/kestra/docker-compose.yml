@@ -31,6 +31,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
     environment:
+      SECRET_GIT_USERNAME: ${GIT_USERNAME}
+      SECRET_GIT_TOKEN: ${GIT_TOKEN}
+      SECRET_WEBHOOK_KEY: ${WEBHOOK_KEY}
       KESTRA_CONFIGURATION: |
         datasources:
           postgres:
@@ -38,9 +41,6 @@ services:
             driverClassName: org.postgresql.Driver
             username: ${POSTGRES_USER}
             password: ${POSTGRES_PASSWORD}
-            GIT_USERNAME: ${GIT_USERNAME}
-            GIT_TOKEN: ${GIT_TOKEN}
-            WEBHOOK_KEY: ${WEBHOOK_KEY}
         kestra:
           # server:
           #   basicAuth:
