@@ -22,7 +22,7 @@ tasks:
         type: io.kestra.plugin.core.namespace.DownloadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - "ansible/**"            # use glob; avoid literal 'inventory.yaml'
+          - "ansible/**"
         allowFailure: true
 
       - id: git_clone_bootstrap
@@ -38,22 +38,24 @@ tasks:
         commands:
           - |
             set -eu
-            if [ -f "ansible/inventory.yaml" ]; then
-              echo "Inventory present from Namespace Files; keeping it."
+            if [ -f "ansible/inventory.yml" ]; then
+              echo "Found ansible/inventory.yml in workspace (Namespace Files)."
             else
-              echo "Inventory missing in workspace; attempting bootstrap from Git clone."
+              echo "Workspace missing ansible/inventory.yml; attempting bootstrap from repo."
+              mkdir -p ansible
               if [ -f "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" ]; then
-                mkdir -p ansible
-                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" "ansible/inventory.yaml"
-                echo "Bootstrapped inventory from repo."
+                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yaml" "ansible/inventory.yml"
+                echo "Bootstrapped from repo inventory.yaml → inventory.yml"
+              elif [ -f "{{ vars.bootstrap_dir }}/ansible/inventory.yml" ]; then
+                cp -v "{{ vars.bootstrap_dir }}/ansible/inventory.yml" "ansible/inventory.yml"
+                echo "Bootstrapped from repo inventory.yml"
               else
-                echo "No inventory.yaml found in repo; creating skeleton to avoid clobber."
-                mkdir -p ansible
-                printf "all:\n  hosts:\n" > ansible/inventory.yaml
+                printf "all:\n  hosts:\n" > ansible/inventory.yml
+                echo "No inventory file in repo; created minimal skeleton at ansible/inventory.yml"
               fi
             fi
-            echo "== inventory.yaml BEFORE upsert =="
-            sed -n '1,200p' ansible/inventory.yaml || true
+            echo "== inventory.yml BEFORE upsert =="
+            sed -n '1,200p' ansible/inventory.yml || true
 
       - id: upsert_yaml
         type: io.kestra.plugin.scripts.shell.Commands
@@ -61,7 +63,7 @@ tasks:
           type: io.kestra.plugin.scripts.runner.docker.Docker
           image: python:3.11-alpine
         env:
-          INV: "ansible/inventory.yaml"
+          INV: "ansible/inventory.yml"
           HOSTNAME: "{{ vars.host }}"
         commands:
           - |
@@ -94,6 +96,7 @@ tasks:
 
             hosts = data["all"]["hosts"]
             if host not in hosts:
+                # None -> emits "host:" (no "{}")
                 hosts[host] = None
 
             inv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,16 +104,15 @@ tasks:
                 yaml.dump(data, f)
             PY
 
-            echo "== inventory.yaml AFTER upsert =="
-            sed -n '1,200p' ansible/inventory.yaml || true
+            echo "== inventory.yml AFTER upsert =="
+            sed -n '1,200p' ansible/inventory.yml || true
 
-      # Upload using the list form AND explicit !!str tags on the path scalars
       - id: upload_to_namespace
         type: io.kestra.plugin.core.namespace.UploadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - to: !!str "ansible/inventory.yaml"
-            from: !!str "ansible/inventory.yaml"
+          - to: "ansible/inventory.yml"
+            from: "ansible/inventory.yml"
 
       - id: ansible_inventory_check
         type: io.kestra.plugin.ansible.cli.AnsibleCLI
@@ -118,18 +120,18 @@ tasks:
         namespaceFiles:
           enabled: true
           include:
-            - "ansible/**"          # glob; avoids the literal again
+            - "ansible/**"
         outputFiles:
           - ansible-inventory.json
         commands:
           - |
             set -euo pipefail
-            test -f "ansible/inventory.yaml" || { echo "Inventory not mounted"; ls -la ansible || true; exit 1; }
+            test -f "ansible/inventory.yml" || { echo "Inventory not mounted"; ls -la ansible || true; exit 1; }
             echo "== mounted namespace files =="
             ls -la ansible || true
-            echo "--- inventory.yaml ---"
-            sed -n '1,200p' ansible/inventory.yaml || true
-            ansible-inventory -i "ansible/inventory.yaml" --list | tee ansible-inventory.json
+            echo "--- inventory.yml ---"
+            sed -n '1,200p' ansible/inventory.yml || true
+            ansible-inventory -i "ansible/inventory.yml" --list | tee ansible-inventory.json
 
       - id: ensure_empty_repo_dir
         type: io.kestra.plugin.scripts.shell.Commands
@@ -147,15 +149,15 @@ tasks:
         username: "{{ secret('GIT_USERNAME') }}"
         password: "{{ secret('GIT_TOKEN') }}"
 
-      - id: copy_into_repo
+      - id: copy_into_repo_with_rename
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
           - |
             set -eu
-            echo "== copying ansible/inventory.yaml into repo checkout =="
-            test -f "ansible/inventory.yaml" || { echo "missing local ansible/inventory.yaml"; exit 1; }
+            echo "== copying ansible/inventory.yml into repo checkout as inventory.yaml =="
+            test -f "ansible/inventory.yml" || { echo "missing local ansible/inventory.yml"; exit 1; }
             mkdir -p "{{ vars.repo_dir }}/ansible"
-            cp -v "ansible/inventory.yaml" "{{ vars.repo_dir }}/ansible/inventory.yaml"
+            cp -v "ansible/inventory.yml" "{{ vars.repo_dir }}/ansible/inventory.yaml"
             echo "== repo tree after copy =="
             find "{{ vars.repo_dir }}" -maxdepth 3 -type f | sort
 
@@ -170,7 +172,7 @@ tasks:
           name: "{{ vars.commit_author_name }}"
           email: "{{ vars.commit_author_email }}"
         addFilesPattern:
-          - !!str "ansible/inventory.yaml"   # tag the scalar
+          - "ansible/inventory.yaml"
 
   - id: open_pr
     type: io.kestra.plugin.github.pulls.Create
