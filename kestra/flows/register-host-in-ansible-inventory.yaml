@@ -5,30 +5,25 @@ tasks:
   - id: set_vars
     type: io.kestra.plugin.core.execution.SetVariables
     variables:
-      # ----- repo & PR settings -----
       git_url: "https://github.com/jcbolling/bollingnet-homelab.git"
       target_branch: "main"
       commit_author_name: "Kestra Bot"
       commit_author_email: "kestra-bot@bollingnet.local"
 
-      # ----- request-derived + runtime vars -----
       host: "{{ trigger.body.hostname }}"
       feature_branch: "inv/add-{{ trigger.body.hostname | replace({'.':'-'}) | lower }}-{{ execution.id | slice(0, 8) }}"
-      repo_dir: "repo-{{ execution.id | slice(0, 8) }}"          # clean per-run checkout
-      bootstrap_dir: "repo-bootstrap"                             # small clone just for fallback
+      repo_dir: "repo-{{ execution.id | slice(0, 8) }}"
 
   - id: work
     type: io.kestra.plugin.core.flow.WorkingDirectory
     tasks:
-      # 1) Try to pull the current inventory from Namespace Files (ok if missing)
       - id: fetch_from_namespace
         type: io.kestra.plugin.core.namespace.DownloadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - "ansible/**"           # ← glob instead of the literal inventory.yaml
+          - "ansible/**"
         allowFailure: true
 
-      # 2) Always clone the repo to bootstrap_dir (fast, used only if file missing)
       - id: git_clone_bootstrap
         type: io.kestra.plugin.git.Clone
         url: "{{ vars.git_url }}"
@@ -37,8 +32,6 @@ tasks:
         username: "{{ secret('GIT_USERNAME') }}"
         password: "{{ secret('GIT_TOKEN') }}"
 
-      # 3) If workspace doesn't have inventory yet, copy from bootstrap; otherwise keep what we have.
-      #    If neither source exists, create a minimal safe skeleton.
       - id: bootstrap_inventory_if_missing
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
@@ -61,7 +54,6 @@ tasks:
             echo "== inventory.yaml BEFORE upsert =="
             sed -n '1,200p' ansible/inventory.yaml || true
 
-      # 4) Upsert new host (refuse to clobber if nothing valid was loaded; emit host without `{}`)
       - id: upsert_yaml
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
@@ -114,22 +106,20 @@ tasks:
             echo "== inventory.yaml AFTER upsert =="
             sed -n '1,200p' ansible/inventory.yaml || true
 
-      # 5) Upload updated file to Namespace Files — use list form, not filesMap
       - id: upload_to_namespace
         type: io.kestra.plugin.core.namespace.UploadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - to: "ansible/inventory.yaml"     # ← list form avoids the scalar map the validator chokes on
+          - to: "ansible/inventory.yaml"
             from: "ansible/inventory.yaml"
 
-      # 6) Validate with ansible-inventory (Namespace Files mounted)
       - id: ansible_inventory_check
         type: io.kestra.plugin.ansible.cli.AnsibleCLI
         containerImage: cytopia/ansible:latest-tools
         namespaceFiles:
           enabled: true
           include:
-            - "ansible/**"                  # ← glob instead of the literal inventory.yaml
+            - "ansible/**"
         outputFiles:
           - ansible-inventory.json
         commands:
@@ -142,7 +132,6 @@ tasks:
             sed -n '1,200p' ansible/inventory.yaml || true
             ansible-inventory -i "ansible/inventory.yaml" --list | tee ansible-inventory.json
 
-      # 7) Ensure a clean repo dir, then clone, copy, commit, and push to feature branch
       - id: ensure_empty_repo_dir
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
@@ -184,7 +173,6 @@ tasks:
         addFilesPattern:
           - "ansible/inventory.yaml"
 
-  # 8) Open a PR embedding ansible-inventory output
   - id: open_pr
     type: io.kestra.plugin.github.pulls.Create
     oauthToken: "{{ secret('GIT_TOKEN') }}"
