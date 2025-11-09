@@ -33,6 +33,7 @@ tasks:
         username: "{{ secret('GIT_USERNAME') }}"
         password: "{{ secret('GIT_TOKEN') }}"
 
+
       - id: bootstrap_inventory_if_missing
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
@@ -110,8 +111,9 @@ tasks:
       - id: upload_to_namespace
         type: io.kestra.plugin.core.namespace.UploadFiles
         namespace: "{{ flow.namespace }}"
-        filesMap:
-          "ansible/inventory.yaml": "ansible/inventory.yaml"
+        files:
+          - to: "ansible/inventory.yaml"
+            from: "ansible/inventory.yaml"
 
       - id: ansible_inventory_check
         type: io.kestra.plugin.ansible.cli.AnsibleCLI
@@ -173,6 +175,7 @@ tasks:
         addFilesPattern:
           - "ansible/inventory.yaml"
 
+  # 8) Open a PR embedding ansible-inventory output
   - id: open_pr
     type: io.kestra.plugin.github.pulls.Create
     oauthToken: "{{ secret('GIT_TOKEN') }}"
