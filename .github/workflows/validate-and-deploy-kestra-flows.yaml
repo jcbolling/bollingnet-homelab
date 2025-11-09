@@ -56,51 +56,46 @@ jobs:
           python - <<'PY'
           import pathlib
           p = pathlib.Path("${{ env.FLOW_FILE }}")
+          if not p.exists(): raise SystemExit("Flow file missing")
           b = p.read_bytes()
-          p.write_bytes(b[3:] if b.startswith(b"\xef\xbb\xbf") else b)
-          print("Checked BOM.")
+          if b.startswith(b"\xef\xbb\xbf"):
+              p.write_bytes(b[3:])
+              print("Removed UTF-8 BOM.")
+          else:
+              print("No BOM present.")
           PY
 
-      # -------- Delete existing flow (OSS API: /flows/delete/by-ids) --------
+      # ---------------- Delete existing flow (OSS endpoint) ----------------
       - name: Delete existing flow (Basic Auth)
         if: ${{ env.KESTRA_USERNAME != '' && env.KESTRA_PASSWORD != '' }}
         run: |
           set -eu
-          url="$KESTRA_SERVER/api/v1/flows/delete/by-ids"
-          body=$(jq -nc --arg ns "$FLOW_NAMESPACE" --arg id "$FLOW_ID" '[{"namespace":$ns,"id":$id}]')
+          url="$KESTRA_SERVER/api/v1/flows/$FLOW_NAMESPACE/$FLOW_ID"
           http_code=$(curl -sS -o /tmp/kestra_delete.json -w '%{http_code}' \
             -u "${KESTRA_USERNAME}:${KESTRA_PASSWORD}" \
-            -H "Content-Type: application/json" \
-            -X POST "$url" \
-            --data "$body")
-          echo "DELETE-by-ids $url -> HTTP $http_code"
-          cat /tmp/kestra_delete.json || true
+            -X DELETE "$url")
+          echo "DELETE $url -> HTTP $http_code"
+          # 200/204 OK (deleted), 404 OK (didn't exist)
           case "$http_code" in
-            200) echo "Delete-by-ids OK";;
-            404) echo "Endpoint not found on this server (unexpected for OSS).";;
-            *) echo "Delete failed (HTTP $http_code)"; exit 1;;
+            200|204|404) echo "Delete step OK";;
+            *) echo "Delete failed (HTTP $http_code)"; cat /tmp/kestra_delete.json || true; exit 1;;
           esac
 
       - name: Delete existing flow (Token)
         if: ${{ env.KESTRA_USERNAME == '' && env.KESTRA_PASSWORD == '' && env.KESTRA_TOKEN != '' }}
         run: |
           set -eu
-          url="$KESTRA_SERVER/api/v1/flows/delete/by-ids"
-          body=$(jq -nc --arg ns "$FLOW_NAMESPACE" --arg id "$FLOW_ID" '[{"namespace":$ns,"id":$id}]')
+          url="$KESTRA_SERVER/api/v1/flows/$FLOW_NAMESPACE/$FLOW_ID"
           http_code=$(curl -sS -o /tmp/kestra_delete.json -w '%{http_code}' \
             -H "Authorization: Bearer ${KESTRA_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "$url" \
-            --data "$body")
-          echo "DELETE-by-ids $url -> HTTP $http_code"
-          cat /tmp/kestra_delete.json || true
+            -X DELETE "$url")
+          echo "DELETE $url -> HTTP $http_code"
           case "$http_code" in
-            200) echo "Delete-by-ids OK";;
-            404) echo "Endpoint not found on this server (unexpected for OSS).";;
-            *) echo "Delete failed (HTTP $http_code)"; exit 1;;
+            200|204|404) echo "Delete step OK";;
+            *) echo "Delete failed (HTTP $http_code)"; cat /tmp/kestra_delete.json || true; exit 1;;
           esac
 
-      # -------------------- Deploy the updated flow YAML --------------------
+      # ------------------------- Deploy updated flow ------------------------
       - name: Deploy via Kestra API (Basic Auth)
         if: ${{ env.KESTRA_USERNAME != '' && env.KESTRA_PASSWORD != '' }}
         run: |
@@ -133,6 +128,7 @@ jobs:
             *) echo "Deploy failed (HTTP $http_code)"; exit 1;;
           esac
 
+      # Guardrail: require some credentials
       - name: Fail if no credentials provided
         if: ${{ (env.KESTRA_USERNAME == '' || env.KESTRA_PASSWORD == '') && env.KESTRA_TOKEN == '' }}
         run: |
