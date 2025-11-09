@@ -19,7 +19,7 @@ jobs:
           ls -laR ./kestra/flows || true
 
       - name: Validate flows (local, strict globs)
-        uses: kestra-io/action-validate@v2
+        uses: kestra-io/validate-action@v2
         with:
           path: ./kestra/flows
           include: |
@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy product flows (only real flow files)
-        uses: kestra-io/action-deploy@v2
+        uses: kestra-io/deploy-action@v2
         with:
           server: ${{ secrets.KESTRA_HOSTNAME }}
           username: ${{ secrets.KESTRA_USERNAME }}
