@@ -56,47 +56,51 @@ jobs:
           python - <<'PY'
           import pathlib
           p = pathlib.Path("${{ env.FLOW_FILE }}")
-          if not p.exists(): raise SystemExit("Flow file missing")
           b = p.read_bytes()
-          if b.startswith(b"\xef\xbb\xbf"):
-              p.write_bytes(b[3:])
-              print("Removed UTF-8 BOM.")
-          else:
-              print("No BOM present.")
+          p.write_bytes(b[3:] if b.startswith(b"\xef\xbb\xbf") else b)
+          print("Checked BOM.")
           PY
 
-      # ---- Delete existing flow (Basic Auth) ----
+      # -------- Delete existing flow (OSS API: /flows/delete/by-ids) --------
       - name: Delete existing flow (Basic Auth)
         if: ${{ env.KESTRA_USERNAME != '' && env.KESTRA_PASSWORD != '' }}
         run: |
           set -eu
-          url="$KESTRA_SERVER/api/v1/namespaces/$FLOW_NAMESPACE/flows/$FLOW_ID"
+          url="$KESTRA_SERVER/api/v1/flows/delete/by-ids"
+          body=$(jq -nc --arg ns "$FLOW_NAMESPACE" --arg id "$FLOW_ID" '[{"namespace":$ns,"id":$id}]')
           http_code=$(curl -sS -o /tmp/kestra_delete.json -w '%{http_code}' \
             -u "${KESTRA_USERNAME}:${KESTRA_PASSWORD}" \
-            -X DELETE "$url")
-          echo "DELETE $url -> HTTP $http_code"
-          # 200/204 OK, 404 means not found (also OK)
+            -H "Content-Type: application/json" \
+            -X POST "$url" \
+            --data "$body")
+          echo "DELETE-by-ids $url -> HTTP $http_code"
+          cat /tmp/kestra_delete.json || true
           case "$http_code" in
-            200|204|404) echo "Delete step OK";;
-            *) echo "Delete failed (HTTP $http_code)"; cat /tmp/kestra_delete.json || true; exit 1;;
+            200) echo "Delete-by-ids OK";;
+            404) echo "Endpoint not found on this server (unexpected for OSS).";;
+            *) echo "Delete failed (HTTP $http_code)"; exit 1;;
           esac
 
-      # ---- Delete existing flow (Token) ----
       - name: Delete existing flow (Token)
         if: ${{ env.KESTRA_USERNAME == '' && env.KESTRA_PASSWORD == '' && env.KESTRA_TOKEN != '' }}
         run: |
           set -eu
-          url="$KESTRA_SERVER/api/v1/namespaces/$FLOW_NAMESPACE/flows/$FLOW_ID"
+          url="$KESTRA_SERVER/api/v1/flows/delete/by-ids"
+          body=$(jq -nc --arg ns "$FLOW_NAMESPACE" --arg id "$FLOW_ID" '[{"namespace":$ns,"id":$id}]')
           http_code=$(curl -sS -o /tmp/kestra_delete.json -w '%{http_code}' \
             -H "Authorization: Bearer ${KESTRA_TOKEN}" \
-            -X DELETE "$url")
-          echo "DELETE $url -> HTTP $http_code"
+            -H "Content-Type: application/json" \
+            -X POST "$url" \
+            --data "$body")
+          echo "DELETE-by-ids $url -> HTTP $http_code"
+          cat /tmp/kestra_delete.json || true
           case "$http_code" in
-            200|204|404) echo "Delete step OK";;
-            *) echo "Delete failed (HTTP $http_code)"; cat /tmp/kestra_delete.json || true; exit 1;;
+            200) echo "Delete-by-ids OK";;
+            404) echo "Endpoint not found on this server (unexpected for OSS).";;
+            *) echo "Delete failed (HTTP $http_code)"; exit 1;;
           esac
 
-      # ---- Deploy via Basic Auth (when both username & password are set) ----
+      # -------------------- Deploy the updated flow YAML --------------------
       - name: Deploy via Kestra API (Basic Auth)
         if: ${{ env.KESTRA_USERNAME != '' && env.KESTRA_PASSWORD != '' }}
         run: |
@@ -106,14 +110,13 @@ jobs:
             -H "Content-Type: application/x-yaml" \
             --data-binary @"$FLOW_FILE" \
             "$KESTRA_SERVER/api/v1/main/flows")
-          echo "HTTP $http_code"
+          echo "POST /main/flows -> HTTP $http_code"
           cat /tmp/kestra_deploy.json || true
           case "$http_code" in
             200|201) echo "Deploy OK (basic auth)";;
             *) echo "Deploy failed (HTTP $http_code)"; exit 1;;
           esac
 
-      # ---- Deploy via Token (when no basic creds but a token is set) ----
       - name: Deploy via Kestra API (Token)
         if: ${{ env.KESTRA_USERNAME == '' && env.KESTRA_PASSWORD == '' && env.KESTRA_TOKEN != '' }}
         run: |
@@ -123,14 +126,13 @@ jobs:
             -H "Content-Type: application/x-yaml" \
             --data-binary @"$FLOW_FILE" \
             "$KESTRA_SERVER/api/v1/main/flows")
-          echo "HTTP $http_code"
+          echo "POST /main/flows -> HTTP $http_code"
           cat /tmp/kestra_deploy.json || true
           case "$http_code" in
             200|201) echo "Deploy OK (token)";;
             *) echo "Deploy failed (HTTP $http_code)"; exit 1;;
           esac
 
-      # ---- Guardrail if no credentials provided at all ----
       - name: Fail if no credentials provided
         if: ${{ (env.KESTRA_USERNAME == '' || env.KESTRA_PASSWORD == '') && env.KESTRA_TOKEN == '' }}
         run: |
