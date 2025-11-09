@@ -30,7 +30,7 @@ jobs:
           find ./.flows_filtered -type f | sort
 
       - name: Validate flows on server-side
-        uses: kestra-io/validate-action@v2
+        uses: kestra-io/validate-action@master
         with:
           directory: ./.flows_filtered
           user: ${{ secrets.KESTRA_USERNAME }}
