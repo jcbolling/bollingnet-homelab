@@ -1,6 +1,8 @@
 id: register-host-in-ansible-inventory
 namespace: company.team
 
+# Adding a comment
+
 tasks:
   - id: set_vars
     type: io.kestra.plugin.core.execution.SetVariables
