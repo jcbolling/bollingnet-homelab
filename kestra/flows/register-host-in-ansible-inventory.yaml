@@ -13,6 +13,7 @@ tasks:
       host: "{{ trigger.body.hostname }}"
       feature_branch: "inv/add-{{ trigger.body.hostname | replace({'.':'-'}) | lower }}-{{ execution.id | slice(0, 8) }}"
       repo_dir: "repo-{{ execution.id | slice(0, 8) }}"
+      bootstrap_dir: "repo-bootstrap"
 
   - id: work
     type: io.kestra.plugin.core.flow.WorkingDirectory
@@ -21,7 +22,7 @@ tasks:
         type: io.kestra.plugin.core.namespace.DownloadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - "ansible/**"
+          - "ansible/**"            # use glob; avoid literal 'inventory.yaml'
         allowFailure: true
 
       - id: git_clone_bootstrap
@@ -88,13 +89,10 @@ tasks:
                 print("[FATAL] Inventory is not a mapping; refusing to overwrite", file=sys.stderr)
                 sys.exit(11)
 
-            # Ensure base structure exists without touching anything else
             data.setdefault("all", CommentedMap())
             data["all"].setdefault("hosts", CommentedMap())
 
             hosts = data["all"]["hosts"]
-
-            # Add only if missing; set to None to emit "host:" (no "{}")
             if host not in hosts:
                 hosts[host] = None
 
@@ -106,12 +104,13 @@ tasks:
             echo "== inventory.yaml AFTER upsert =="
             sed -n '1,200p' ansible/inventory.yaml || true
 
+      # Upload using the list form AND explicit !!str tags on the path scalars
       - id: upload_to_namespace
         type: io.kestra.plugin.core.namespace.UploadFiles
         namespace: "{{ flow.namespace }}"
         files:
-          - to: "ansible/inventory.yaml"
-            from: "ansible/inventory.yaml"
+          - to: !!str "ansible/inventory.yaml"
+            from: !!str "ansible/inventory.yaml"
 
       - id: ansible_inventory_check
         type: io.kestra.plugin.ansible.cli.AnsibleCLI
@@ -119,7 +118,7 @@ tasks:
         namespaceFiles:
           enabled: true
           include:
-            - "ansible/**"
+            - "ansible/**"          # glob; avoids the literal again
         outputFiles:
           - ansible-inventory.json
         commands:
@@ -171,7 +170,7 @@ tasks:
           name: "{{ vars.commit_author_name }}"
           email: "{{ vars.commit_author_email }}"
         addFilesPattern:
-          - "ansible/inventory.yaml"
+          - !!str "ansible/inventory.yaml"   # tag the scalar
 
   - id: open_pr
     type: io.kestra.plugin.github.pulls.Create
