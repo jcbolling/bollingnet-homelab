@@ -12,7 +12,7 @@ inputs:
 tasks:
   - id: first_task
     type: io.kestra.plugin.core.debug.Return
-    formats: thrilled
+    format: thrilled
 
   - id: second_task
     type: io.kestra.plugin.scripts.shell.Commands
