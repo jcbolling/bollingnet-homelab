@@ -5,25 +5,21 @@ tasks:
   - id: set_vars
     type: io.kestra.plugin.core.execution.SetVariables
     variables:
-      # ----- repo & PR settings -----
       git_url: "https://github.com/jcbolling/bollingnet-homelab.git"
       target_branch: "main"
       commit_author_name: "Kestra Bot"
       commit_author_email: "kestra-bot@bollingnet.local"
 
-      # ----- request-derived + runtime vars -----
       host: "{{ trigger.body.hostname }}"
       feature_branch: "inv/add-{{ trigger.body.hostname | replace({'.':'-'}) | lower }}-{{ execution.id | slice(0, 8) }}"
       repo_dir: "repo-{{ execution.id | slice(0, 8) }}"
       bootstrap_dir: "repo-bootstrap"
 
-      # Paths used inside non-shell fields: never mention 'inventory.yaml' here
       inv_ns_path: "ansible/inventory.yml"
 
   - id: work
     type: io.kestra.plugin.core.flow.WorkingDirectory
     tasks:
-      # 1) Try to pull current inventory from Namespace Files
       - id: fetch_from_namespace
         type: io.kestra.plugin.core.namespace.DownloadFiles
         namespace: "{{ flow.namespace }}"
@@ -31,7 +27,6 @@ tasks:
           - "ansible/**"
         allowFailure: true
 
-      # 2) Clone repo to bootstrap_dir (fallback only)
       - id: git_clone_bootstrap
         type: io.kestra.plugin.git.Clone
         url: "{{ vars.git_url }}"
@@ -40,7 +35,6 @@ tasks:
         username: "{{ secret('GIT_USERNAME') }}"
         password: "{{ secret('GIT_TOKEN') }}"
 
-      # 3) Ensure we have inv_ns_path in workspace (prefer Namespace Files, else repo, else skeleton)
       - id: bootstrap_inventory_if_missing
         type: io.kestra.plugin.scripts.shell.Commands
         env:
@@ -68,7 +62,6 @@ tasks:
             echo "== BEFORE upsert =="
             sed -n '1,200p' "$INV_NS_PATH" || true
 
-      # 4) Upsert host into inv_ns_path (refuse to clobber)
       - id: upsert_yaml
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
@@ -117,7 +110,6 @@ tasks:
             echo "== AFTER upsert =="
             sed -n '1,200p' "{{ vars.inv_ns_path }}" || true
 
-      # 5) Upload updated file to Namespace Files (list form)
       - id: upload_to_namespace
         type: io.kestra.plugin.core.namespace.UploadFiles
         namespace: "{{ flow.namespace }}"
@@ -125,7 +117,6 @@ tasks:
           - to: "{{ vars.inv_ns_path }}"
             from: "{{ vars.inv_ns_path }}"
 
-      # 6) Validate with ansible-inventory (mount Namespace Files; use inv_ns_path)
       - id: ansible_inventory_check
         type: io.kestra.plugin.ansible.cli.AnsibleCLI
         containerImage: cytopia/ansible:latest-tools
@@ -147,7 +138,6 @@ tasks:
             sed -n '1,200p' "$INV_NS_PATH" || true
             ansible-inventory -i "$INV_NS_PATH" --list | tee ansible-inventory.json
 
-      # 7) Clean per-run repo checkout, clone, copy+rename, commit, push
       - id: ensure_empty_repo_dir
         type: io.kestra.plugin.scripts.shell.Commands
         commands:
@@ -191,7 +181,6 @@ tasks:
         author:
           name: "{{ vars.commit_author_name }}"
           email: "{{ vars.commit_author_email }}"
-        # IMPORTANT: no addFilesPattern here (we already staged the file)
 
   - id: open_pr
     type: io.kestra.plugin.github.pulls.Create
