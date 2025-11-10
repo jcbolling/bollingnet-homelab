@@ -1,8 +1,10 @@
 volumes:
   postgres-data:
-    driver: local
   kestra-data:
-    driver: local
+
+networks:
+  kestra-network:
+    driver: bridge
 
 services:
   postgres:
@@ -15,15 +17,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD?"You must set POSTGRES_PASSWORD in the environment"}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+     - kestra-network
 
   kestra:
     image: kestra/kestra:latest
     pull_policy: always
-    # Note that this setup with a root user is intended for development purpose.
-    # Our base image runs without root, but the Docker Compose implementation needs root to access the Docker socket
     user: "root"
     command: server standalone
     volumes:
@@ -42,10 +44,6 @@ services:
             username: ${POSTGRES_USER}
             password: ${POSTGRES_PASSWORD}
         kestra:
-          # server:
-          #   basicAuth:
-          #     username: admin@kestra.io # it must be a valid email address
-          #     password: Admin1234 # it must be at least 8 characters long with uppercase letter and a number
           repository:
             type: postgres
           storage:
@@ -57,10 +55,33 @@ services:
           tasks:
             tmpDir:
               path: /tmp/kestra-wd/tmp
+          # This is just the public URL; doesn't affect bind.
           url: ${KESTRA_URL:-http://localhost:8080/}
     ports:
-      - "8080:8080"
-      - "8081:8081"
+      - "8080:8080"   # UI/API
+      - "8081:8081"   # health/management
+    healthcheck:
+      # Kestra exposes Micronaut health on 8081
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - kestra-network
+
+  ngrok:
+    image: ngrok/ngrok:alpine
+    command: http kestra:8080
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"   # Web UI
+    depends_on:
+      kestra:
+        condition: service_healthy
+    networks:
+    - kestra-network
