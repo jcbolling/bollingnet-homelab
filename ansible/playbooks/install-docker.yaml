@@ -1,4 +1,4 @@
-- name: Docker
+- name: Install Docker
   hosts: docker
   become: true # Root is required to execute one or more tasks in this playbook
   tasks:
