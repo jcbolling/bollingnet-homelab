@@ -5,3 +5,7 @@ all:
     bn-kube-03.int.bollingnet.net:
     bn-kube-04.int.bollingnet.net:
     bn-kube-05.int.bollingnet.net:
+  children:
+    docker:
+      hosts:
+        bn-docker-01.int.bollingnet.net:
