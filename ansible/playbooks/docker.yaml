@@ -1,0 +1,33 @@
+- name: Docker
+  hosts: docker
+  become: true # Root is required to execute one or more tasks in this playbook
+  tasks:
+    - name: Install prerequsite packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - software-properties-common
+        state: present
+        force_apt_get: true
+        update_cache: true
+    - name: Install Docker GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0755"
+    - name: Add Docker APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable"
+        state: present
+    - name: Install Docker
+      ansible.builtin.apt:
+        name: docker-ce
+        state: present
+        update_cache: true
+    - name: Start Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
