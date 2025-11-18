@@ -1,4 +1,7 @@
 all:
+  vars:
+    sops: "{{ lookup('community.sops.sops', 'secrets.yaml') | ansible.builtin.from_yaml }}"
+    ansible_user: "{{ sops.ansible_user }}"
   hosts:
     bn-kube-01.int.bollingnet.net:
     bn-kube-02.int.bollingnet.net:
@@ -9,3 +12,4 @@ all:
     docker:
       hosts:
         bn-docker-01.int.bollingnet.net:
+        bn-docker-02.int.bollingnet.net:
