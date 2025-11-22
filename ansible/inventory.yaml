@@ -3,13 +3,20 @@ all:
     sops: "{{ lookup('community.sops.sops', inventory_dir ~ '/secrets.yaml') | ansible.builtin.from_yaml }}"
     ansible_user: "{{ sops.ansible_user }}"
   hosts:
-    bn-kube-01.int.bollingnet.net:
-    bn-kube-02.int.bollingnet.net:
-    bn-kube-03.int.bollingnet.net:
-    bn-kube-04.int.bollingnet.net:
-    bn-kube-05.int.bollingnet.net:
   children:
+    kubernetes_cluster:
+      hosts:
+        bn-kube-01.int.bollingnet.net:
+        bn-kube-02.int.bollingnet.net:
+        bn-kube-03.int.bollingnet.net:
+        bn-kube-04.int.bollingnet.net:
+        bn-kube-05.int.bollingnet.net:
+        bn-kube-06.int.bollingnet.net:
     docker:
       hosts:
         bn-docker-01.int.bollingnet.net:
         bn-docker-02.int.bollingnet.net:
+    proxmox:
+      hosts:
+        bn-prox-01.int.bollingnet.net:
+        bn-prox-02.int.bollingnet.net:
