@@ -1,0 +1,9 @@
+# site.yaml
+- import_playbook: update-linux-servers.yaml # noqa: name[play]
+
+- name: Install and configure Network UPS Tools (NUT) on Raspberry Pi Zero W's attached to UPSes
+  hosts: ups_monitors
+  become: true
+
+  roles:
+    - nut
