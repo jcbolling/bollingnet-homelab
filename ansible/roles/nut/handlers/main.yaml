@@ -1,0 +1,7 @@
+---
+- name: Restart NUT service
+  block:
+    - name: Restart nut-server systemd service
+      ansible.builtin.service:
+        name: nut-server
+        state: restarted

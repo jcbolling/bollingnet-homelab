@@ -1,0 +1,237 @@
+---
+
+# =========================
+# Install NUT via packages
+# =========================
+
+- name: Ensure NUT packages are installed
+  ansible.builtin.apt:
+    name: "{{ nut_packages }}"
+    state: present
+    update_cache: true
+
+# =========================
+# nut-scanner presence
+# =========================
+
+- name: Check if nut-scanner binary exists
+  ansible.builtin.stat:
+    path: "{{ nut_scanner_path }}"
+  register: nut_scanner_stat
+
+- name: Warn if nut-scanner binary is not present
+  ansible.builtin.debug:
+    msg: >-
+      nut-scanner binary was not found at {{ nut_scanner_path }}.
+      Auto-detection of UPS devices will be skipped.
+  when: not nut_scanner_stat.stat.exists
+
+# =========================
+# Scan UPSes with nut-scanner
+# =========================
+
+- name: Initialize scanned UPS list
+  ansible.builtin.set_fact:
+    nut_scanned_ups: []
+
+- name: Run nut-scanner to detect USB UPS devices
+  ansible.builtin.shell: |
+    set -o pipefail
+    "{{ nut_scanner_path }}" -U 2>/dev/null | awk '
+      /^\[/ {
+        gsub(/[\[\]]/, "", $1);
+        name=$1;
+      }
+      /driver =/ {
+        gsub(/"/, "", $3);
+        driver=$3;
+      }
+      /port =/ {
+        gsub(/"/, "", $3);
+        port=$3;
+      }
+      /vendorid =/ {
+        gsub(/"/, "", $3);
+        vendorid=$3;
+      }
+      /productid =/ {
+        gsub(/"/, "", $3);
+        productid=$3;
+      }
+      /^$/ && name != "" {
+        printf "%s,%s,%s,%s,%s\n", name, driver, port, vendorid, productid;
+        name=driver=port=vendorid=productid="";
+      }
+      END {
+        if (name != "")
+          printf "%s,%s,%s,%s,%s\n", name, driver, port, vendorid, productid;
+      }
+    '
+  register: nut_scanner_parsed
+  changed_when: false
+  failed_when: false
+  when: nut_scanner_stat.stat.exists
+
+- name: Build nut_scanned_ups from nut-scanner output
+  ansible.builtin.set_fact:
+    nut_scanned_ups: "{{ nut_scanned_ups + [parsed_ups] }}"
+  loop: "{{ nut_scanner_parsed.stdout_lines | default([]) }}"
+  vars:
+    ups_parts: "{{ item.split(',') }}"
+    parsed_ups:
+      name: "{{ ups_parts[0] | default('unknown') }}"
+      driver: "{{ ups_parts[1] | default('') }}"
+      port: "{{ ups_parts[2] | default('') }}"
+      vendorid: "{{ ups_parts[3] | default('') }}"
+      productid: "{{ ups_parts[4] | default('') }}"
+  when:
+    - nut_scanner_stat.stat.exists
+    - nut_scanner_parsed.stdout_lines is defined
+    - nut_scanner_parsed.stdout_lines | length > 0
+
+- name: Show scanned UPS devices (nut_scanned_ups)
+  ansible.builtin.debug:
+    var: nut_scanned_ups
+  when:
+    - nut_scanned_ups is defined
+    - nut_scanned_ups | length > 0
+
+- name: No UPS devices detected by nut-scanner
+  ansible.builtin.debug:
+    msg: "nut-scanner did not detect any UPS devices (nut_scanned_ups is empty)."
+  when:
+    - nut_scanned_ups is defined
+    - nut_scanned_ups | length == 0
+
+# =========================
+# Auto-generate upsmon MONITOR entries
+# =========================
+
+- name: Auto-generate upsmon MONITOR entries from scanned UPSes when none are defined
+  ansible.builtin.set_fact:
+    nut_upsmon_monitors: >-
+      {{
+        nut_scanned_ups
+        | map('combine', {
+            'upsmon_system': 'localhost',
+            'power_value': 1,
+            'username': nut_upsd_users[0].name,
+            'password': nut_upsd_users[0].password,
+            'type': 'master'
+          })
+        | list
+      }}
+  when:
+    - nut_autoscan_upsmon | default(true) | bool
+    - (nut_upsmon_monitors | default([])) | length == 0
+    - (nut_scanned_ups | default([])) | length > 0
+    - (nut_upsd_users | default([])) | length > 0
+
+- name: Show upsmon MONITOR entries (nut_upsmon_monitors)
+  ansible.builtin.debug:
+    var: nut_upsmon_monitors
+  when:
+    - nut_upsmon_monitors is defined
+    - nut_upsmon_monitors | length > 0
+
+- name: No upsmon MONITOR entries configured
+  ansible.builtin.debug:
+    msg: >-
+      No upsmon MONITOR entries are configured.
+      Either nut_scanner found no UPSes, autoscan is disabled,
+      or nut_upsmon_monitors was intentionally left empty.
+  when:
+    - nut_upsmon_monitors is not defined or nut_upsmon_monitors | length == 0
+
+# =========================
+# Configuration files
+# =========================
+
+- name: Ensure NUT config directory exists
+  ansible.builtin.file:
+    path: "{{ nut_config_dir }}"
+    state: directory
+    owner: "{{ nut_conf_owner }}"
+    group: "{{ nut_conf_group }}"
+    mode: "{{ nut_conf_dir_mode }}"
+
+- name: Deploy nut.conf
+  ansible.builtin.template:
+    src: "nut.conf.j2"
+    dest: "{{ nut_config_dir }}/nut.conf"
+    owner: "{{ nut_conf_owner }}"
+    group: "{{ nut_conf_group }}"
+    mode: "{{ nut_conf_file_mode }}"
+  notify: Restart nut-server systemd service
+
+- name: Deploy ups.conf
+  ansible.builtin.template:
+    src: "ups.conf.j2"
+    dest: "{{ nut_config_dir }}/ups.conf"
+    owner: "{{ nut_conf_owner }}"
+    group: "{{ nut_conf_group }}"
+    mode: "{{ nut_conf_file_mode }}"
+  notify: Restart nut-server systemd service
+
+- name: Deploy upsd.conf
+  ansible.builtin.template:
+    src: "upsd.conf.j2"
+    dest: "{{ nut_config_dir }}/upsd.conf"
+    owner: "{{ nut_conf_owner }}"
+    group: "{{ nut_conf_group }}"
+    mode: "{{ nut_conf_file_mode }}"
+  notify: Restart nut-server systemd service
+
+- name: Deploy upsd.users
+  ansible.builtin.template:
+    src: "upsd.users.j2"
+    dest: "{{ nut_config_dir }}/upsd.users"
+    owner: "{{ nut_conf_owner }}"
+    group: "{{ nut_conf_group }}"
+    mode: "{{ nut_conf_file_mode }}"
+  notify: Restart nut-server systemd service
+
+- name: Deploy upsmon.conf
+  ansible.builtin.template:
+    src: "upsmon.conf.j2"
+    dest: "{{ nut_config_dir }}/upsmon.conf"
+    owner: "{{ nut_conf_owner }}"
+    group: "{{ nut_conf_group }}"
+    mode: "{{ nut_conf_file_mode }}"
+  notify: Restart nut-server systemd service
+
+# =========================
+# Confirm UPS driver is connected and remediate if not
+# =========================
+
+- name: Verify UPS driver connectivity
+  vars:
+    custom_ups_name: "{{ (nut_custom_ups_names | default({})).get(inventory_hostname, inventory_hostname) }}"
+  ansible.builtin.command: sudo upsc {{ custom_ups_name }}
+  register: nut_command_result
+  ignore_errors: true
+  changed_when: nut_command_result.rc != 0
+
+- name: Force udev to reload rules
+  ansible.builtin.command: sudo udevadm control --reload-rules
+  when: nut_command_result.rc != 0
+  changed_when: nut_command_result.rc != 0
+
+- name: Trigger reloaded udev rules
+  ansible.builtin.command: sudo udevadm trigger
+  when: nut_command_result.rc != 0
+  changed_when: nut_command_result.rc != 0
+  notify: Restart nut-server systemd service
+
+- name: Try to verify UPS driver connectivity again after remediation actions
+  vars:
+    custom_ups_name: "{{ (nut_custom_ups_names | default({})).get(inventory_hostname, inventory_hostname) }}"
+  ansible.builtin.command: sudo upsc {{ custom_ups_name }}
+  register: nut_post_remediation_command_result
+  ignore_errors: true
+  when: nut_command_result.rc != 0
+  changed_when: nut_command_result.rc == 0
+
+- name: Print results of post-remediation verification command
+  ansible.builtin.debug:
+    var: nut_post_remediation_command_result.stdout_lines
