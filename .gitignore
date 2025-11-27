@@ -1,3 +1,25 @@
+# OpenTofu-specific files
+.opentofu/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars.json # for JSON variable files
+crash.log
+override.tf
+override_*.tf
+.terraformignore # for potential future use with remote backend uploads
+
+# Providers and modules
+.terraform.d/
+.tofu.d/
+modules/
+providers/
+
+# variables
+*.tfvars
+
+# Miscellaneous
 .env
 .vscode
 **secrets**

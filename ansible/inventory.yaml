@@ -20,3 +20,8 @@ all:
       hosts:
         bn-prox-01.int.bollingnet.net:
         bn-prox-02.int.bollingnet.net:
+    ups_monitors:
+      hosts:
+        bn-upsm-01.int.bollingnet.net:
+        bn-upsm-02.int.bollingnet.net:
+        bn-upsm-03.int.bollingnet.net:

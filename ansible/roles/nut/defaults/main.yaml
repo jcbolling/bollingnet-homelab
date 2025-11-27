@@ -1,0 +1,64 @@
+---
+# Directory to house NUT configuration
+nut_config_dir: "/etc/nut"
+
+# Ownership and permissions for config files
+nut_conf_owner: "root"
+nut_conf_group: "nut"
+nut_conf_dir_mode: "0750"
+nut_conf_file_mode: "0640"
+
+# High-level NUT config values (nut.conf)
+nut_mode: "netserver"
+
+# Path to the nut-scanner binary. Nut-scanner binary is used to generate information to auto-populate NUT configuration files
+nut_scanner_path: "/usr/bin/nut-scanner"
+
+# Custom mapping of Ansible inventory names to UPS names (dictionary)
+
+nut_custom_ups_names:
+  bn-upsm-01.int.bollingnet.net: deskpi-mini-rack-ups
+  bn-upsm-02.int.bollingnet.net: upstairs-wiring-closet-ups
+  bn-upsm-03.int.bollingnet.net: basement-rack-ups
+
+# Install / manage these NUT packages. Nut-client package is needed for nut-scanner binary.
+nut_packages:
+  - nut
+  - nut-server
+  - nut-client
+
+# UPS definitions for ups.conf (used if nut-scanner doesn't detect any connected UPSes)
+nut_ups:
+  - name: "myups"
+    driver: "usbhid-ups"
+    port: "auto"
+    desc: "My UPS on USB"
+
+# upsd.conf listen directives
+nut_upsd_listen:
+  # - "127.0.0.1 3493"
+  - "0.0.0.0 3493"
+
+# upsd.users users
+nut_upsd_users:
+  - name: "{{ sops.nut_username }}"
+    password: "{{ sops.nut_password }}"
+    upsmon: "master"     # e.g. 'master', 'slave'
+    extra: ['actions = SET',
+            'instcmds = ALL']            # list of extra lines, e.g. 'actions = SET'
+
+# If true, auto-generate upsmon MONITOR lines from scanned UPSes when
+# nut_upsmon_monitors is empty.
+nut_autoscan_upsmon: true
+
+# MONITOR lines for upsmon.conf.
+# If left empty and nut_autoscan_upsmon is true and scanned UPSes exist,
+# the role will auto-populate this based on nut_scanned_ups and the first
+# user in nut_upsd_users.
+nut_upsmon_monitors: []
+
+# Basic upsmon general settings
+nut_upsmon_minsupplies: 1
+nut_upsmon_shutdowncmd: "/sbin/shutdown -h now"
+nut_upsmon_notifycmd: ""
+nut_upsmon_pollinterval: 5
