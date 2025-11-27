@@ -24,7 +24,9 @@
         state: present
     - name: Install Docker
       ansible.builtin.apt:
-        name: docker-ce
+        name:
+          - docker-ce
+          - docker-compose
         state: present
         update_cache: true
     - name: Start Docker service
