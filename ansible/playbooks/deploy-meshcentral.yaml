@@ -1,0 +1,69 @@
+---
+- name: Deploy MeshCentral with Docker Compose
+  hosts: docker
+  become: true
+
+  vars:
+    meshcentral_root: /opt/meshcentral
+    meshcentral_hostname: bn-docker-02.int.bollingnet.net
+    meshcentral_port: 8086
+
+  tasks:
+    - name: Ensure Docker Compose plug-in
+      ansible.builtin.apt:
+        name:
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Ensure meshcentral data base directory exists
+      ansible.builtin.file:
+        path: "{{ meshcentral_root }}/meshcentral"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+        recurse: true
+
+    - name: Deploy docker-compose.yml for MeshCentral
+      ansible.builtin.copy:
+        dest: "{{ meshcentral_root }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          services:
+            meshcentral:
+              restart: always
+              container_name: meshcentral
+              image: typhonragewind/meshcentral:latest
+              ports:
+                - "{{ meshcentral_port }}:443"
+              environment:
+                - HOSTNAME={{ meshcentral_hostname }}
+                - REVERSE_PROXY=false
+                - REVERSE_PROXY_TLS_PORT=
+                - IFRAME=false
+                - ALLOW_NEW_ACCOUNTS=true
+                - WEBRTC=false
+                - BACKUPS_PW={{ sops.meshcentral_backups_password }}
+                - BACKUP_INTERVAL=24
+                - BACKUP_KEEP_DAYS=10
+              volumes:
+                - ./meshcentral/data:/opt/meshcentral/meshcentral-data
+                - ./meshcentral/user_files:/opt/meshcentral/meshcentral-files
+                - ./meshcentral/backups:/opt/meshcentral/meshcentral-backups
+
+    - name: Ensure MeshCentral stack is up
+      community.docker.docker_compose:
+        project_src: "{{ meshcentral_root }}"
+        state: present
+        pull: true
+      register: meshcentral_compose
+      notify:
+        - Output Docker Compose changes
+
+  handlers:
+    - name: Output Docker Compose changes
+      ansible.builtin.debug:
+        var: meshcentral_compose
