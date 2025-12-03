@@ -1,0 +1,9 @@
+# roles/ha_pihole/defaults/main.yml
+
+# Upstream DNS that the *host itself* should use in /etc/resolv.conf
+ha_dns_upstream_1: "1.1.1.1"
+ha_dns_upstream_2: "10.0.4.1"
+
+ha_dns_host_static_local_dns:
+  - "10.0.4.54"
+  - "10.0.4.1"

@@ -1,0 +1,40 @@
+services:
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole-ha
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TZ: "{{ ha_dns_tz }}"
+      FTLCONF_webserver_api_password: "{{ ha_dns_webpassword }}"
+      DNS1: "{{ ha_dns_upstream_1 }}"
+      DNS2: "{{ ha_dns_upstream_2 }}"
+    volumes:
+      - "/opt/ha-dns/pihole/etc-pihole:/etc/pihole"
+      - "/opt/ha-dns/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  keepalived:
+    image: shawly/keepalived:2.2      # or :latest if you prefer
+    container_name: keepalived-ha
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - NET_BROADCAST
+    environment:
+      TZ: "{{ ha_dns_tz }}"
+      KEEPALIVED_CUSTOM_CONFIG: "true"
+    volumes:
+      - "/opt/ha-dns/keepalived/keepalived.conf:/etc/keepalived/keepalived.conf:ro"
+      - "/opt/ha-dns/keepalived/check_pihole.sh:/usr/local/bin/check_pihole.sh:ro"
+    depends_on:
+      - pihole
