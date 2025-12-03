@@ -1,0 +1,103 @@
+# roles/ha_pihole/tasks/main.yml
+
+- name: Gather facts (required for ansible_default_ipv4.*)
+  ansible.builtin.setup:
+
+########################################################
+# PREP HOST FOR PI-HOLE (FREE PORT 53)
+########################################################
+
+- name: Ensure DNSStubListener is disabled in resolved.conf
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: '^#?DNSStubListener='
+    line: 'DNSStubListener=no'
+    create: true
+    mode: "0644"
+
+- name: Optionally set explicit upstream DNS in resolved.conf
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: '^#?DNS='
+    line: "DNS={{ ha_dns_host_static_local_dns | join(' ') }}"
+    insertafter: '^\[Resolve\]'
+    create: true
+    mode: "0644"
+
+- name: Stat /etc/resolv.conf to see if it is a symlink
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+  register: resolv_conf_stat
+
+- name: Remove /etc/resolv.conf if it is a symlink
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    state: absent
+  when: resolv_conf_stat.stat.islnk | default(false)
+
+- name: Create static /etc/resolv.conf with host upstream DNS
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {% for ns in ha_dns_host_static_local_dns %}
+      nameserver {{ ns }}
+      {% endfor %}
+
+- name: Stop and disable systemd-resolved (free port 53)
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: false
+
+########################################################
+# HA PI-HOLE STACK (PI-HOLE + KEEPALIVED)
+########################################################
+
+- name: Ensure ha-dns directories exist
+  ansible.builtin.file:
+    path: "/opt/ha-dns/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - ""
+    - "pihole"
+    - "pihole/etc-pihole"
+    - "pihole/etc-dnsmasq.d"
+    - "keepalived"
+
+- name: Deploy docker-compose stack for HA Pi-hole
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/ha-dns/docker-compose.yml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ha-pihole stack
+
+- name: Deploy keepalived.conf
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /opt/ha-dns/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ha-pihole stack
+
+- name: Deploy check_pihole.sh
+  ansible.builtin.template:
+    src: check_pihole.sh.j2
+    dest: /opt/ha-dns/keepalived/check_pihole.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart ha-pihole stack
+
+- name: Bring up HA Pi-hole stack
+  community.docker.docker_compose_v2:
+    project_src: /opt/ha-dns
+    state: present

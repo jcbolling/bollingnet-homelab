@@ -1,0 +1,22 @@
+# Site-wide variables
+ansible_user: ENC[AES256_GCM,data:j4wLbB5rwQ==,iv:GknF0pSNa6kfo4TbsXRVOO7fwv+M1Y8HgxEPW8UXnKk=,tag:4iorNcc7r0fZaCItbDz8xQ==,type:str]
+# NUT role-specific variables
+nut_username: ENC[AES256_GCM,data:h5OMJzoyAqn+lg==,iv:hX8EbroVaiAkBQ4e0TabHlfDHi6IQQcMjxrurnUZmVE=,tag:lZv0trSmHye53dRUR2vXpg==,type:str]
+nut_password: ENC[AES256_GCM,data:hQzLLIAdk52LhRV5GKtJ2fDoUpp2IGA9erY7SjT3a5c=,iv:ET6XocblD9vl1zA2Z6S6gFzC2FV4tiC3bLqe8H8USAA=,tag:8C91/2vksVwNJqiAwQ/T3g==,type:str]
+# Meshcentral-specific variables
+meshcentral_backups_password: ENC[AES256_GCM,data:S5fuEFLe+SkbyHQnMJMbCKq/wksm1LQqJOrJAD/l1HM=,iv:dCDLvvDVGGkXoFglTOJ7wmIWlunxTnnDmsBdhq0QoLo=,tag:GtCCFN95mbl1+cOWFEjbeQ==,type:str]
+sops:
+    age:
+        - recipient: age1trzalmfzy22xjj8mrdrgj4n063ve90wj049szwqa33slhny3hpnqr06t8u
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBnK2hVbmpHNHhVWHpIQ3dR
+            b2k2RHptNWhKb3JycTc1a2FDdkRVeXkrY2lRCk56MTRodXUvNTJRM0hpOVFOYXNq
+            RjdNcE93alQxbTkwT1hvYXdGdlk1VTgKLS0tIGJIdzRhMzFHUWk0QmNCREJnQkVw
+            SWs3THE4MDRVN0tSczdjMzl4YXg0UE0K8EUyRejwBt2EfR7Kixib44D3LUBxyP/2
+            pTKilJNl4giwcaazva87Fje7ZRFjKmFtx4/J3FN4rZC0rHXaXBaL/w==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-11-27T23:17:29Z"
+    mac: ENC[AES256_GCM,data:pF90EqwfLzkJGBTG1YCCVHOwAhS9zPzxtWARUcROpDtGuwiwoACdKORVPfPcgrwS7HCRh2HXjYmY+/7n2iVY1JQh50hqcWPT2si/ZxBuvS+n57xO257NhSe62qdEUZNJ67ylM7tWezLJdbtIg0e8oehgQ9AhVoHo6djcZ22J/nU=,iv:AP7xNXzmnagrakZVDaNQidRX8JOPeB6hA+GkF736wa0=,tag:0WyU2SHf66WMx1p9ci3uLw==,type:str]
+    encrypted_regex: .*
+    version: 3.11.0

@@ -1,0 +1,27 @@
+vrrp_script chk_pihole {
+    script "/usr/local/bin/check_pihole.sh"
+    interval 5
+    fall 3
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state {{ ha_dns_state }}
+    interface {{ ha_dns_interface | default(ansible_default_ipv4.interface) }}
+    virtual_router_id {{ ha_dns_vrid }}
+    priority {{ ha_dns_priority }}
+    advert_int 1
+
+    authentication {
+        auth_type PASS
+        auth_pass {{ ha_dns_auth_pass }}
+    }
+
+    virtual_ipaddress {
+        {{ ha_dns_vip_cidr }} dev {{ ha_dns_interface | default(ansible_default_ipv4.interface) }} label {{ ha_dns_interface | default(ansible_default_ipv4.interface) }}:1
+    }
+
+    track_script {
+        chk_pihole
+    }
+}

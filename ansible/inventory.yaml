@@ -1,7 +1,4 @@
 all:
-  vars:
-    sops: "{{ lookup('community.sops.sops', inventory_dir ~ '/secrets.yaml') | ansible.builtin.from_yaml }}"
-    ansible_user: "{{ sops.ansible_user }}"
   hosts:
   children:
     kubernetes_cluster:
