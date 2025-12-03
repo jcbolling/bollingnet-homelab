@@ -1,0 +1,2 @@
+ha_dns_state: "MASTER"
+ha_dns_priority: 150

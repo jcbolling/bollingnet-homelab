@@ -1,0 +1,2 @@
+ha_dns_state: "BACKUP"
+ha_dns_priority: 100
