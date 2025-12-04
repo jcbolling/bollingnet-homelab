@@ -70,6 +70,24 @@
     - "pihole/etc-dnsmasq.d"
     - "keepalived"
 
+- name: Ensure Pi-hole data directory is writable by container user
+  ansible.builtin.file:
+    path: "/opt/ha-dns/etc-pihole"
+    state: directory
+    owner: "999"
+    group: "999"
+    mode: "0755"
+    recurse: true
+
+- name: Ensure Pi-hole dnsmasq.d directory is writable by container user
+  ansible.builtin.file:
+    path: "/opt/ha-dns/etc-dnsmasq.d"
+    state: directory
+    owner: "999"
+    group: "999"
+    mode: "0755"
+    recurse: true
+
 - name: Deploy docker-compose stack for HA Pi-hole
   ansible.builtin.template:
     src: docker-compose.yml.j2
