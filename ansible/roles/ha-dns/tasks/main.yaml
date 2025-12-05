@@ -1,10 +1,11 @@
-# roles/ha_pihole/tasks/main.yml
+# roles/ha-dns/tasks/main.yml
 
-- name: Gather facts (required for ansible_default_ipv4.*)
+- name: Gather facts for HA Technitium nodes
   ansible.builtin.setup:
+  tags: [ha-dns]
 
 ########################################################
-# PREP HOST FOR PI-HOLE (FREE PORT 53)
+# PREP HOST: FREE PORT 53 + ALLOW VIP BIND
 ########################################################
 
 - name: Ensure DNSStubListener is disabled in resolved.conf
@@ -14,26 +15,30 @@
     line: 'DNSStubListener=no'
     create: true
     mode: "0644"
+  tags: [ha-dns]
 
-- name: Optionally set explicit upstream DNS in resolved.conf
+- name: Set explicit upstream DNS in resolved.conf
   ansible.builtin.lineinfile:
     path: /etc/systemd/resolved.conf
     regexp: '^#?DNS='
-    line: "DNS={{ ha_dns_host_static_local_dns | join(' ') }}"
+    line: "DNS={{ ha_host_upstream_dns | join(' ') }}"
     insertafter: '^\[Resolve\]'
     create: true
     mode: "0644"
+  tags: [ha-dns]
 
 - name: Stat /etc/resolv.conf to see if it is a symlink
   ansible.builtin.stat:
     path: /etc/resolv.conf
-  register: resolv_conf_stat
+  register: ha_dns_resolv_conf_stat
+  tags: [ha-dns]
 
 - name: Remove /etc/resolv.conf if it is a symlink
   ansible.builtin.file:
     path: /etc/resolv.conf
     state: absent
-  when: resolv_conf_stat.stat.islnk | default(false)
+  when: ha_dns_resolv_conf_stat.stat.islnk | default(false)
+  tags: [ha-dns]
 
 - name: Create static /etc/resolv.conf with host upstream DNS
   ansible.builtin.copy:
@@ -42,62 +47,76 @@
     group: root
     mode: "0644"
     content: |
-      {% for ns in ha_dns_host_static_local_dns %}
+      {% for ns in ha_host_upstream_dns %}
       nameserver {{ ns }}
       {% endfor %}
+  tags: [ha-dns]
 
 - name: Stop and disable systemd-resolved (free port 53)
   ansible.builtin.systemd:
     name: systemd-resolved
     state: stopped
     enabled: false
+  tags: [ha-dns]
+
+- name: Allow binding VIP addresses (ip_nonlocal_bind)
+  ansible.builtin.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+  tags: [ha-dns]
 
 ########################################################
-# HA PI-HOLE STACK (PI-HOLE + KEEPALIVED)
+# HA TECHNITIUM STACK (Technitium + Keepalived)
 ########################################################
 
-- name: Ensure ha-dns directories exist
+- name: Ensure ha-dns root directories exist
   ansible.builtin.file:
-    path: "/opt/ha-dns/{{ item }}"
+    path: "{{ ha_dns_root }}/{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
   loop:
     - ""
-    - "pihole"
-    - "pihole/etc-pihole"
-    - "pihole/etc-dnsmasq.d"
+    - "technitium"
     - "keepalived"
+  tags: [ha-dns]
 
-- name: Deploy docker-compose stack for HA Pi-hole
-  ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: /opt/ha-dns/docker-compose.yml
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart ha-pihole stack
-
-- name: Deploy keepalived.conf
+- name: Deploy keepalived.conf for HA VIP
   ansible.builtin.template:
     src: keepalived.conf.j2
-    dest: /opt/ha-dns/keepalived/keepalived.conf
+    dest: "{{ ha_dns_root }}/keepalived/keepalived.conf"
     owner: root
     group: root
     mode: "0644"
-  notify: Restart ha-pihole stack
+  notify: Restart ha-dns stack
+  tags: [ha-dns]
 
-- name: Deploy check_pihole.sh
+- name: Deploy Technitium health check script
   ansible.builtin.template:
-    src: check_pihole.sh.j2
-    dest: /opt/ha-dns/keepalived/check_pihole.sh
+    src: check_dns.sh.j2
+    dest: "{{ ha_dns_root }}/keepalived/check_dns.sh"
     owner: root
     group: root
     mode: "0755"
-  notify: Restart ha-pihole stack
+  notify: Restart ha-dns stack
+  tags: [ha-dns]
 
-- name: Bring up HA Pi-hole stack
+- name: Deploy docker-compose.yml for HA DNS
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ ha_dns_root }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ha-dns stack
+  tags: [ha-dns]
+
+- name: Ensure HA DNS stack is running
   community.docker.docker_compose_v2:
-    project_src: /opt/ha-dns
+    project_src: "{{ ha_dns_root }}"
     state: present
+  tags: [ha-dns]
