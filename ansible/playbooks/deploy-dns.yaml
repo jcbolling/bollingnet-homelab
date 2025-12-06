@@ -1,0 +1,268 @@
+---
+# =====================================================================
+# DNS STACK DEPLOYMENT
+# - HA Technitium (ns1/ns2) via ha-dns role
+# - Standalone Technitium (ns3) via standalone_dns role
+# - Zone topology for int.bollingnet.net:
+#     * Primary on ns1 (bn-docker-01)
+#     * Secondary on ns2 (bn-docker-02) and ns3 (bn-docker-03)
+# - Install "Query Logs (Sqlite)" app on all Technitium instances
+#
+# Tags:
+#   - ha_dns         → deploy HA stack
+#   - standalone_dns → deploy standalone instance
+#   - zone_config    → configure primary/secondary topology
+#   - dns_apps       → install Query Logs app
+#   - dns_all        → run everything
+#
+# NOTE: This playbook requires the following collections:
+#  - https://galaxy.ansible.com/ui/repo/published/effectivelywild/technitium_dns/
+#  - https://galaxy.ansible.com/ui/repo/published/community/docker/
+# =====================================================================
+
+#######################################################################
+# 1) DEPLOY HA TECHNITIUM (ns1/ns2)
+#######################################################################
+- name: Deploy HA Technitium DNS (ns1/ns2)
+  hosts: ha_dns
+  become: true
+  gather_facts: true
+  tags:
+    - ha_dns
+    - dns_all
+
+  roles:
+    - role: ha_dns
+      tags:
+        - ha_dns
+        - dns_all
+
+#######################################################################
+# 2) DEPLOY STANDALONE TECHNITIUM (ns3)
+#######################################################################
+- name: Deploy standalone Technitium DNS (ns3)
+  hosts: standalone_dns
+  become: true
+  gather_facts: true
+  tags:
+    - standalone_dns
+    - dns_all
+
+  roles:
+    - role: standalone_dns
+      tags:
+        - standalone_dns
+        - dns_all
+
+#######################################################################
+# 3) CONFIGURE PRIMARY ns1 FOR int.bollingnet.net
+#######################################################################
+- name: Configure PRIMARY ns1 for int.bollingnet.net
+  hosts: bn-docker-01.int.bollingnet.net
+  gather_facts: false
+  tags:
+    - zone_config
+    - dns_all
+
+  vars:
+    dns_zone_name: "int.bollingnet.net"
+
+    technitium_api_port: 5380
+
+    # IPs of the SECONDARIES that should be allowed AXFR/NOTIFY
+    dns_secondary_ips:
+      - "10.0.4.118"  # bn-docker-02 IP
+      - "10.0.4.54"   # bn-docker-03 IP
+
+  tasks:
+    - name: Wait for Technitium API on ns1
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: "{{ technitium_api_port }}"
+        timeout: 60
+
+    - name: Login to Technitium on ns1
+      effectivelywild.technitium_dns.technitium_dns_login:
+        api_url: "http://localhost"
+        username: "{{ technitium_admin_username }}"
+        password: "{{ technitium_admin_password }}"
+        validate_certs: false
+      register: ns1_login
+
+    - name: Add VIP to DNS Server Local Endpoints
+      effectivelywild.technitium_dns.technitium_dns_set_server_settings:
+        api_url: "http://localhost"
+        api_token: "{{ ns1_login.token }}"
+        dnsServerLocalEndPoints:
+          - "0.0.0.0:53"
+          - "10.0.4.53:53"
+          - "[::]:53"
+
+    - name: Ensure int.bollingnet.net is PRIMARY on ns1 with AXFR/NOTIFY to ns2+ns3
+      effectivelywild.technitium_dns.technitium_dns_zone:
+        api_url: "http://localhost"
+        api_token: "{{ ns1_login.token }}"
+        zone: "{{ dns_zone_name }}"
+        state: present
+        type: "Primary"
+        useSoaSerialDateScheme: true
+
+    - name: Update int.bollingnet.net zone settings to allow replication and notificaiton to ns2+ns3
+      effectivelywild.technitium_dns.technitium_dns_set_zone_options:
+        api_url: "http://localhost"
+        api_token: "{{ ns1_login.token }}"
+        zone: "{{ dns_zone_name }}"
+        zoneTransfer: UseSpecifiedNetworkACL
+        zoneTransferNetworkACL:
+          - "10.0.4.106"
+          - "10.0.4.54"
+        notify: SpecifiedNameServers
+        notifyNameServers:
+          - "10.0.4.106"
+          - "10.0.4.54"
+
+#######################################################################
+# 4) CONFIGURE SECONDARIES ns2 + ns3 FOR int.bollingnet.net
+#######################################################################
+- name: Configure SECONDARIES ns2 and ns3 for int.bollingnet.net
+  hosts:
+    - bn-docker-02.int.bollingnet.net
+    - bn-docker-03.int.bollingnet.net
+  gather_facts: false
+  tags:
+    - zone_config
+    - dns_all
+
+  vars:
+    dns_zone_name: "int.bollingnet.net"
+    dns_primary_host: "10.0.4.228"
+    technitium_api_port: 5380
+
+  tasks:
+    - name: Wait for Technitium API login endpoint to respond
+      ansible.builtin.uri:
+        url: "http://localhost:5380/api/login"
+        method: GET
+        status_code: 200
+      register: api_check
+      retries: 30
+      delay: 2
+      until: api_check.status == 200
+
+    - name: Login to Technitium on secondary
+      effectivelywild.technitium_dns.technitium_dns_login:
+        api_url: "http://localhost"
+        username: "{{ technitium_admin_username }}"
+        password: "{{ technitium_admin_password }}"
+        validate_certs: false
+      register: secondary_login
+
+    - name: Ensure int.bollingnet.net is SECONDARY pulling from ns1
+      effectivelywild.technitium_dns.technitium_dns_zone:
+        api_url: "http://localhost"
+        api_token: "{{ secondary_login.token }}"
+        zone: "{{ dns_zone_name }}"
+        state: present
+        type: "Secondary"
+        primaryNameServerAddresses:
+          - "{{ dns_primary_host }}"
+        zoneTransferProtocol: "Tcp"
+
+#######################################################################
+# 5) INSTALL "QUERY LOGS (SQLITE)" APP ON ALL TECHNITIUM INSTANCES
+#######################################################################
+- name: Install Query Logs (Sqlite) app on all Technitium instances
+  hosts:
+    - bn-docker-01.int.bollingnet.net
+    - bn-docker-02.int.bollingnet.net
+    - bn-docker-03.int.bollingnet.net
+  gather_facts: false
+  tags:
+    - dns_apps
+    - dns_all
+
+  vars:
+    target_app_name: "Query Logs (Sqlite)"
+    app_download_url: "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v8.zip"
+
+  tasks:
+    - name: Login to Technitium API
+      effectivelywild.technitium_dns.technitium_dns_login:
+        api_url: "http://localhost"
+        username: "{{ technitium_admin_username }}"
+        password: "{{ technitium_admin_password }}"
+        validate_certs: false
+      register: login_result
+
+    - name: Install Query Logs (Sqlite) app
+      effectivelywild.technitium_dns.technitium_dns_download_and_install_app:
+        api_url: "http://localhost"
+        api_token: "{{ login_result.token }}"
+        name: "{{ target_app_name }}"
+        url: "{{ app_download_url }}"
+      register: app_install_result
+
+    - name: Display app installation result
+      ansible.builtin.debug:
+        var: app_install_result.installed_app
+
+#######################################################################
+# 6) VALIDATE DNS ZONE REPLICATION (SOA SERIALS)
+#######################################################################
+- name: Validate DNS zone replication for int.bollingnet.net
+  hosts: localhost
+  gather_facts: false
+  tags:
+    - dns_checks
+    - dns_all
+
+  vars:
+    dns_zone_name: "int.bollingnet.net"
+
+    # Servers to test (adjust hostnames/IPs if needed)
+    dns_servers:
+      ns1:
+        host: "bn-docker-01.int.bollingnet.net"
+      ns2:
+        host: "bn-docker-02.int.bollingnet.net"
+      ns3:
+        host: "bn-docker-03.int.bollingnet.net"
+
+  tasks:
+    - name: Query SOA record from each DNS server
+      ansible.builtin.command: >
+        dig +short SOA {{ dns_zone_name }} @{{ item.value.host }}
+      register: soa_results
+      loop: "{{ dns_servers | dict2items }}"
+      changed_when: false
+
+    - name: Fail if any SOA query failed
+      ansible.builtin.assert:
+        that:
+          - soa_results.results | selectattr('rc', 'ne', 0) | list | length == 0
+        fail_msg: >
+          One or more DNS servers failed to return an SOA record
+          for {{ dns_zone_name }}. Results: {{ soa_results.results }}
+
+    - name: Build map of SOA serials per server
+      ansible.builtin.set_fact:
+        dns_soa_serials: "{{ dns_soa_serials | default({}) | combine({item.item.key: item.stdout.split()[2]}) }}"
+      loop: "{{ soa_results.results }}"
+
+    - name: Show SOA serials for each server
+      ansible.builtin.debug:
+        var: dns_soa_serials
+
+    - name: Assert secondaries match primary SOA serial
+      ansible.builtin.assert:
+        that:
+          - dns_soa_serials.ns2 == dns_soa_serials.ns1
+          - dns_soa_serials.ns3 == dns_soa_serials.ns1
+        success_msg: >
+          SOA serials match: ns1={{ dns_soa_serials.ns1 }},
+          ns2={{ dns_soa_serials.ns2 }}, ns3={{ dns_soa_serials.ns3 }}.
+        fail_msg: >
+          SOA serial mismatch detected:
+          ns1={{ dns_soa_serials.ns1 }},
+          ns2={{ dns_soa_serials.ns2 }},
+          ns3={{ dns_soa_serials.ns3 }}.
