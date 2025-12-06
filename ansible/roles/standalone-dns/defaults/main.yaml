@@ -1,0 +1,28 @@
+# roles/standalone-dns/defaults/main.yml
+
+# Root directory for the standalone Technitium stack
+standalone_dns_root: /opt/standalone-dns
+
+# Technitium DNS Server Docker image
+standalone_dns_image: "technitium/dns-server:14.2.0"
+
+# Timezone for the container
+standalone_dns_timezone: "America/Indiana/Indianapolis"
+
+# DNS server “domain” (purely informational in UI/logs)
+standalone_dns_server_domain: "ns3.int.bollingnet.net"
+
+# Upstream forwarders Technitium should use (for recursion)
+standalone_dns_forwarders: "1.1.1.1,8.8.8.8"
+
+# Technitium web console ports
+standalone_dns_web_http_port: 5380
+standalone_dns_web_https_port: 53443
+
+# Uncomment this variable to enable HTTPS directly on the web interface if not using Traefik or another reverse-proxy in front
+# standalone_dns_web_https_port: 44353
+
+# Upstream DNS servers for the *host* itself (used in /etc/resolv.conf)
+standalone_host_upstream_dns:
+  - "10.0.4.1"
+  - "1.1.1.1"

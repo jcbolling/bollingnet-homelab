@@ -1,0 +1,7 @@
+# roles/standalone-dns/handlers/main.yml
+
+- name: Restart standalone-dns stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ standalone_dns_root }}"
+    state: restarted
+  tags: [standalone_dns]
