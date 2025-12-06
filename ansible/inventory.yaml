@@ -13,6 +13,7 @@ all:
       hosts:
         bn-docker-01.int.bollingnet.net:
         bn-docker-02.int.bollingnet.net:
+        bn-docker-03.int.bollingnet.net:
     proxmox:
       hosts:
         bn-prox-01.int.bollingnet.net:
