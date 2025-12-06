@@ -21,7 +21,7 @@
   ansible.builtin.lineinfile:
     path: /etc/systemd/resolved.conf
     regexp: '^#?DNS='
-    line: "DNS={{ ha_host_upstream_dns | join(' ') }}"
+    line: "DNS={{ ha_dns_host_upstream_dns | join(' ') }}"
     insertafter: '^\[Resolve\]'
     create: true
     mode: "0644"
@@ -47,7 +47,7 @@
     group: root
     mode: "0644"
     content: |
-      {% for ns in ha_host_upstream_dns %}
+      {% for ns in ha_dns_host_upstream_dns %}
       nameserver {{ ns }}
       {% endfor %}
   tags: [ha-dns]

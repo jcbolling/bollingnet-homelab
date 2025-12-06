@@ -23,6 +23,6 @@ standalone_dns_web_https_port: 53443
 # standalone_dns_web_https_port: 44353
 
 # Upstream DNS servers for the *host* itself (used in /etc/resolv.conf)
-standalone_host_upstream_dns:
+standalone_dns_host_upstream_dns:
   - "10.0.4.1"
   - "1.1.1.1"

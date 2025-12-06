@@ -37,6 +37,6 @@ ha_dns_forwarders: "1.1.1.1,8.8.8.8"
 
 # Upstream DNS for the *host itself* in /etc/resolv.conf on HA nodes
 # Likely your standalone Technitium + router
-ha_host_upstream_dns:
+ha_dns_host_upstream_dns:
   - "10.0.4.54"
   - "10.0.4.1"

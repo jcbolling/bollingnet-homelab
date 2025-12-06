@@ -21,7 +21,7 @@
   ansible.builtin.lineinfile:
     path: /etc/systemd/resolved.conf
     regexp: '^#?DNS='
-    line: "DNS={{ standalone_host_upstream_dns | join(' ') }}"
+    line: "DNS={{ standalone_dns_host_upstream_dns | join(' ') }}"
     insertafter: '^\[Resolve\]'
     create: true
     mode: "0644"
@@ -47,7 +47,7 @@
     group: root
     mode: "0644"
     content: |
-      {% for ns in standalone_host_upstream_dns %}
+      {% for ns in standalone_dns_host_upstream_dns %}
       nameserver {{ ns }}
       {% endfor %}
   tags: [standalone_dns]

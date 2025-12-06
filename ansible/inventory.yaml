@@ -14,6 +14,13 @@ all:
         bn-docker-01.int.bollingnet.net:
         bn-docker-02.int.bollingnet.net:
         bn-docker-03.int.bollingnet.net:
+    ha_dns:
+      hosts:
+        bn-docker-01.int.bollingnet.net:
+        bn-docker-02.int.bollingnet.net:
+    standalone_dns:
+      hosts:
+        bn-docker-03.int.bollingnet.net:
     proxmox:
       hosts:
         bn-prox-01.int.bollingnet.net:

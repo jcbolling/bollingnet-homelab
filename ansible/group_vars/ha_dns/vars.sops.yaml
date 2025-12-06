@@ -1,0 +1,23 @@
+ha_dns_vip: ENC[AES256_GCM,data:cpPUG+41IJ74,iv:ohCYaJT6hDao1BCSYv8mjNNqWyBxhGIJnfLJrT4Tua8=,tag:LuqoV36C2w4nm1RLv9AicA==,type:str]
+ha_dns_vip_cidr: ENC[AES256_GCM,data:wFmu/Tzo+56sNXdA,iv:GO6yG9PRLbgxDcBSpSiH8o55atbdV+HM7lFExozRBxs=,tag:Wrx+W4WzrP66Div47+ZqUQ==,type:str]
+ha_dns_vrid: ENC[AES256_GCM,data:HJ8=,iv:QQtGv9MALqrV4GonsHbID1ZzldwYLxIHeN8caYIcZBw=,tag:Vb25c/XWA9ribJ73nHagpA==,type:int]
+# VRRP auth_pass
+ha_dns_keepalived_auth_pass: ENC[AES256_GCM,data:g6hT5wwqMJPWtWlyAVr1VDVnbk3zZxbIOVgR7CBJsGw=,iv:Bj0YRmoCb8sca7CA7izZ/SJAEr49DaP2MQr2Y12YHTk=,tag:9qDO8g+aFXFR6VpO2AgSsg==,type:str]
+# Technitium credentials
+technitium_admin_username: ENC[AES256_GCM,data:vmDwUlc=,iv:jJJmIDlp3ZZ4oMlx1b74HUHLmROgsFtmaLGpzPw25uY=,tag:Lq8ZEaFfyEpmBp38AzrZFA==,type:str]
+technitium_admin_password: ENC[AES256_GCM,data:YOXaBoLGBpNiUfAW/dMZlsGSOmQvB4wa6Y7ix5C6sRI=,iv:N1RtbnSZ3vMeOsCCXh0gedrsb3GKChKM13wtKp9GfM0=,tag:owMENICkaE2KDbAy8yoZnQ==,type:str]
+sops:
+    age:
+        - recipient: age1trzalmfzy22xjj8mrdrgj4n063ve90wj049szwqa33slhny3hpnqr06t8u
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBhdFNUQ2hJc0JScFBPaTNz
+            MTJ2R09mMjNBeWpXN1B1OHpvTXBmY05yNlZvClp1dGZJa3FPcmFFalh2dUQ4Um1h
+            VDYwTFM2RllRUkduMzlKNTdUU09OZ0UKLS0tIDJGaGlWdFVjWE1qVkpKSE93ajZQ
+            UUx5enlBdFgvUXJ3czloVE5oSGxzNGsKRL34XDPOOl/yUynuDx/ol/FinptczrZG
+            Z4JdeTBIsjGjdcoSMw4DXu6F824gE1T75bddtcJ2ATlpkYtH1IdbeQ==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-12-06T20:45:13Z"
+    mac: ENC[AES256_GCM,data:/XEeKwT9bNSQN3tkPug6D9LmmW0se1uhED5YpnvMQNKpjJaedTj5fqHe8Fh9XeGXdo9Owanv2K+LR9odQBBKEiYgSogfACcj6KlfEtXwLwq6rBNr5PdsYGwYfHY0UmZft6pRjrE4X93InfKM6NWDT9TyeQW78f1BAV1ny/Dp7V8=,iv:cmWff+Avuj3OYl6QE0pV6MCIOnrKNLjYLlqLysdCLq8=,tag:Rhodh2v9126TlUnBK6YguQ==,type:str]
+    encrypted_regex: .*
+    version: 3.11.0
