@@ -80,7 +80,6 @@
     group: root
     mode: "0755"
   loop:
-    - ""
     - "technitium"
     - "keepalived"
   tags: [ha-dns]
