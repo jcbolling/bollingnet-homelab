@@ -1,0 +1,18 @@
+# Technitium credentials
+technitium_admin_username: ENC[AES256_GCM,data:S/REoCE=,iv:UtEyFIUTZONPn3+q9pJu90bimc8ljUZG8I8SFRuNHLM=,tag:uAavaYt87Y0z2L6RMG0akw==,type:str]
+technitium_admin_password: ENC[AES256_GCM,data:lPEGjqEOfMrHghw+rmHorraeEanpfWIs+OLtzfkWx0M=,iv:VUUh7ncopyYHf3sEhB4Q3H40z80MRte6PSFLHDeQMKA=,tag:WdJKLyzKTWkLdlO0f6oIwg==,type:str]
+sops:
+    age:
+        - recipient: age1trzalmfzy22xjj8mrdrgj4n063ve90wj049szwqa33slhny3hpnqr06t8u
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA2V1BXQjFlR0RYcjZNTFhJ
+            RzF3YWFzOEJFWFVSVmY1WWJKSjFBbG1iV2hBClpqTC9wcmZUNnpZSXhKY0tPSmpS
+            Q3ZHV1RtN1FDV1VyVzlTWkpiU1VGVXcKLS0tIElvQS94dFpBZWIrdEwvaVRvUS91
+            NFNlVjNJUS9uZXF6UDFMUFVZNTlwY3MKF2aw8NwvhNin26Bk31BVoylrB0JXLOUJ
+            LG4NQpqgJAG3l5bNXzTZCP0OTKkmtfAfTzA2KrmcIIxVCB8JZa69Xw==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-12-06T20:45:24Z"
+    mac: ENC[AES256_GCM,data:oq6m2C3D4FtiQnDFUSBO0+DA/PYN1NRAEY4Y46OwXCCjeLMyT4ailLJsMrr0ccABPuO4eZeIRvYHU1sdGUgVbVGnAur+sDyy/z55ipPoWbGt431ZRdOqy/tziDVwRRN3WS74bW2ZDtkns18P8Bpo6CvELDxQAlPeyVNJoR94Xjg=,iv:SDrx9FI/karGqfn5vLUiPyOtcFpNu1Hqrch37/gHzNA=,tag:qnC7Sa5I0PZLYmsR8H5l1w==,type:str]
+    encrypted_regex: .*
+    version: 3.11.0
