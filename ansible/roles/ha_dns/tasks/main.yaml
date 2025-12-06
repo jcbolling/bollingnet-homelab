@@ -1,0 +1,121 @@
+# roles/ha-dns/tasks/main.yml
+
+- name: Gather facts for HA Technitium nodes
+  ansible.builtin.setup:
+  tags: [ha-dns]
+
+########################################################
+# PREP HOST: FREE PORT 53 + ALLOW VIP BIND
+########################################################
+
+- name: Ensure DNSStubListener is disabled in resolved.conf
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: '^#?DNSStubListener='
+    line: 'DNSStubListener=no'
+    create: true
+    mode: "0644"
+  tags: [ha-dns]
+
+- name: Set explicit upstream DNS in resolved.conf
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/resolved.conf
+    regexp: '^#?DNS='
+    line: "DNS={{ ha_dns_host_upstream_dns | join(' ') }}"
+    insertafter: '^\[Resolve\]'
+    create: true
+    mode: "0644"
+  tags: [ha-dns]
+
+- name: Stat /etc/resolv.conf to see if it is a symlink
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+  register: ha_dns_resolv_conf_stat
+  tags: [ha-dns]
+
+- name: Remove /etc/resolv.conf if it is a symlink
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    state: absent
+  when: ha_dns_resolv_conf_stat.stat.islnk | default(false)
+  tags: [ha-dns]
+
+- name: Create static /etc/resolv.conf with host upstream DNS
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {% for ns in ha_dns_host_upstream_dns %}
+      nameserver {{ ns }}
+      {% endfor %}
+  tags: [ha-dns]
+
+- name: Stop and disable systemd-resolved (free port 53)
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: false
+  tags: [ha-dns]
+
+- name: Allow binding VIP addresses (ip_nonlocal_bind)
+  ansible.builtin.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+  tags: [ha-dns]
+
+########################################################
+# HA TECHNITIUM STACK (Technitium + Keepalived)
+########################################################
+
+- name: Ensure ha-dns root directories exist
+  ansible.builtin.file:
+    path: "{{ ha_dns_root }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "technitium"
+    - "keepalived"
+  tags: [ha-dns]
+
+- name: Deploy keepalived.conf for HA VIP
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: "{{ ha_dns_root }}/keepalived/keepalived.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ha-dns stack
+  tags: [ha-dns]
+
+- name: Deploy Technitium health check script
+  ansible.builtin.template:
+    src: check_dns.sh.j2
+    dest: "{{ ha_dns_root }}/keepalived/check_dns.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart ha-dns stack
+  tags: [ha-dns]
+
+- name: Deploy docker-compose.yml for HA DNS
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ ha_dns_root }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ha-dns stack
+  tags: [ha-dns]
+
+- name: Ensure HA DNS stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ ha_dns_root }}"
+    state: present
+  tags: [ha-dns]
