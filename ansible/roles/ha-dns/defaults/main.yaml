@@ -1,9 +1,42 @@
-# roles/ha_pihole/defaults/main.yml
+# roles/ha_technitium/defaults/main.yml
 
-# Upstream DNS that the *host itself* should use in /etc/resolv.conf
-ha_dns_upstream_1: "1.1.1.1"
-ha_dns_upstream_2: "10.0.4.1"
+# Root directory for the HA DNS stack (Technitium + Keepalived)
+ha_dns_root: /opt/ha-dns
 
-ha_dns_host_static_local_dns:
+# Technitium DNS Server Docker image
+ha_dns_technitium_image: "technitium/dns-server:14.2.0"
+
+# Keepalived Docker image
+ha_dns_keepalived_image: "shawly/keepalived:2.2"
+
+# VIP settings
+ha_dns_vip: "10.0.4.53"
+ha_dns_cidr: 24
+
+# Interface to bind VIP to (default: primary IPv4 interface)
+ha_dns_interface: "{{ ansible_default_ipv4.interface | default('eth0@if4') }}"
+
+# Keepalived VRRP auth password (override via SOPS/vars)
+ha_dns_auth_pass: "{{ ha_dns_keepalived_auth_pass | default('CHANGEME') }}"
+
+# VRRP priority; higher wins MASTER. This is default if not set elsewhere Override per-host in host_vars.
+ha_dns_priority: 100
+
+# Technitium web console ports
+ha_dns_web_http_port: 5380
+ha_dns_web_https_port: 53443
+
+# Technitium server domain. This is default if not set in host-vars
+ha_dns_server_domain: "ns.int.bollingnet.net"
+
+# Admin password for Technitium (override via SOPS)
+ha_dns_admin_password: "{{ technitium_admin_password | default('CHANGEME') }}"
+
+# Forwarders Technitium should use (comma-separated string)
+ha_dns_forwarders: "1.1.1.1,8.8.8.8"
+
+# Upstream DNS for the *host itself* in /etc/resolv.conf on HA nodes
+# Likely your standalone Technitium + router
+ha_host_upstream_dns:
   - "10.0.4.54"
   - "10.0.4.1"

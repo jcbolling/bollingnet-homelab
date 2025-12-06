@@ -2,16 +2,10 @@ ha_dns_vip: ENC[AES256_GCM,data:f2hIzjutm8D0,iv:EhEDko7Mxp0SP2H5CxitN3oVuH2c9wUk
 ha_dns_vip_cidr: ENC[AES256_GCM,data:4SaVA2GzzJpBQlx1,iv:2niLIoIK9S8IGw27DrO9VBcyURUxV0fgJcBymjyBMDw=,tag:f9xixezHAsGG86LO5dOU1A==,type:str]
 ha_dns_vrid: ENC[AES256_GCM,data:Cpk=,iv:DgIusSRIRySaLIzODBA2ZklAwGG/gkHqQ6+jPtMSl/k=,tag:EXLhLIALx/1HdqFdoCZEYQ==,type:int]
 # VRRP auth_pass
-ha_dns_auth_pass: ENC[AES256_GCM,data:lTC+XGD6ROEiMrnYv6tt53LPrBXJmVE9YtZj8RkURwM=,iv:HxHEzBqP7fPZC5ZoiX1efu1eWUOBtXKo3Fecs0FbjQE=,tag:dmutBQed40dW7IIOgrpgyQ==,type:str]
-ha_dns_tz: ENC[AES256_GCM,data:bs/CRD7E6tq12ZZPeE9qjR4lP34jDRL2h0yCDA==,iv:+R2nEGzFppXU1BT3Z8FePdaxvPgM+DClzz+k3/RlRBo=,tag:uj/VSrgUil6BhfUj5rxp2Q==,type:str]
-# Upstream resolvers for Pi-hole itself
-# Cloudflare 
-ha_dns_upstream_1: ENC[AES256_GCM,data:w4lev2MpRQ==,iv:QVMh8jRAcRJezax9CW9g7NZbpZHuJp2SFgyIDj87c0E=,tag:/bIv39Eq0iBbfbYVHgDEDA==,type:str]
-# BN-DMP
-ha_dns_upstream_2: ENC[AES256_GCM,data:bFCwk7tpSPk=,iv:alZTISwjMavbaGKvD1BxiGM5AqCJlVXyA8VEdBtEXkE=,tag:uO9t/ruSKHGPqR4Hk9PHhw==,type:str]
-# Pi-hole web UI password
-ha_dns_webpassword: ENC[AES256_GCM,data:qRgjHvxz7kyjHYkkbNM6cBkkeZWyc+kN//rAiMGSJUI=,iv:711R7HCe80Fd7gMiXrn4dc9Fa/eLJiNQOe4l+wUNlww=,tag:5v2Qa4sXrFMZ7essKpvDwA==,type:str]
-ha_dns_interface: ENC[AES256_GCM,data:Y3+XLHHLyU6VQc0pLZqysdreqenm71UVlAtzUC1hl4J3CCPE,iv:nn8Uz3ogUHakbCbTo9b1p9Qtdei3tyYrF0sWPVvwovk=,tag:qgs4bQv61YxsafhkaA7gtQ==,type:str]
+ha_dns_keepalived_auth_pass: ENC[AES256_GCM,data:i0Nzzxs5wba/3uJ8Zlpwz+jzLZmx16NlnFkpqZZ3J4k=,iv:5igpM58MfMzatMmTbrgmXrNXrQs0o6ztZEJIUrxMcxo=,tag:jm00GYtPJ4xhj7pYrrL/2Q==,type:str]
+# Technitium web UI passwords
+ha_dns_admin_password: ENC[AES256_GCM,data:1XH4nkc+36V4w//EgdcJWjf+5sLVRFT/9fFIbwtNkmI=,iv:To23NTUeMCCZ7HMXFwEZ9DiP67w1z9Ls+/k/SZ3U1Ls=,tag:Xy0T7g9ELgRSpaLF2Y2CLQ==,type:str]
+standalone_dns_admin_password: ENC[AES256_GCM,data:I6S7cfqJ8ZizUH6/qdzPUQ4bqDHyIqVuVFmzWevESW4=,iv:hz6ej4lfZWQfuw5LXRBYqWU2SiEOoLmaXFZaiBajsmk=,tag:1zQV7pRjAPLMersSRme1Dw==,type:str]
 sops:
     age:
         - recipient: age1trzalmfzy22xjj8mrdrgj4n063ve90wj049szwqa33slhny3hpnqr06t8u
@@ -23,7 +17,7 @@ sops:
             aFgydC82SnRvM3NzbllISzUyaCt1cG8KSoDdoLcVQCBplN+i/gEQXqH+x4m1iR6E
             IcKYeCoFRFLTcQ4XYeUUmDNZpHHs8EO9icj6wp7PtJ33IXERn7tgDw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2025-12-03T17:53:29Z"
-    mac: ENC[AES256_GCM,data:Nj9+r0zOFmmhxvP2wPUG8PMGArLgde4uhH/eMObyismOt4BNBPuOY0ZPXfQVuSWv+8w8AcrETWFfKavjONRgUHogzx3ws25GjUHAc++FIzKuysnM4Vp0GrR1e2KrMZkUBCAS2dcsnOWlGKW5rY4hOucgDjJh14PQ5T7ljlTRzho=,iv:D98es9ra08TjCSNKs83eRPsevdppsQWCCWXrQM4LxIg=,tag:eaDD0O/SIKYDK0lxPLfMoA==,type:str]
+    lastmodified: "2025-12-05T21:51:21Z"
+    mac: ENC[AES256_GCM,data:ZVSFYCfU20GxO/f5fM4QrVL3N4uAgLjzDqNKwezVFdw0+c8ptLANEXMPLMRzEgW02KDUSvK7ZxAzg2UuoMpwzEADScRtSXuYoKC8Yi1XNJjA+lMjeqT1sMcLocFwPCrR2IJiH3CEYws7hBkNx0mc1rdCbjLxLviIDUGF0scpbKk=,iv:2gpyOU03njhWbFt6E3IDpD+8YDEIetcbjhmy3rR4wcE=,tag:5LVdYV47ZlxsBwLZp4L+hA==,type:str]
     encrypted_regex: .*
     version: 3.11.0

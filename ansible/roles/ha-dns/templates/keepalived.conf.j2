@@ -1,5 +1,7 @@
-vrrp_script chk_pihole {
-    script "/usr/local/bin/check_pihole.sh"
+# roles/ha_technitium/templates/keepalived.conf.j2
+
+vrrp_script chk_dns {
+    script "{{ ha_dns_root }}/check_dns.sh"
     interval 5
     fall 3
     rise 2
@@ -22,6 +24,6 @@ vrrp_instance VI_1 {
     }
 
     track_script {
-        chk_pihole
+        chk_dns
     }
 }

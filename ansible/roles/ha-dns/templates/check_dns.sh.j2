@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# roles/ha_technitium/templates/check_technitium.sh.j2
+
+set -euo pipefail
+
+# Basic DNS health check against localhost DNS
+HOST="127.0.0.1"
+PORT="53"
+TEST_NAME="example.com"
+
+if command -v dig >/dev/null 2>&1; then
+  dig @"$HOST" -p "$PORT" "$TEST_NAME" +short >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    exit 0
+  else
+    exit 1
+  fi
+else
+  # Fallback: see if port 53 is open at all
+  nc -z "$HOST" "$PORT" >/dev/null 2>&1 && exit 0 || exit 1
+fi

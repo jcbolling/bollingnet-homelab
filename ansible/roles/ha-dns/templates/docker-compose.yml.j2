@@ -1,40 +1,50 @@
+# roles/ha_technitium/templates/docker-compose.yml.j2
+
 services:
-  pihole:
-    image: pihole/pihole:latest
-    container_name: pihole-ha
-    network_mode: host
+  technitium:
+    image: {{ ha_dns_technitium_image }}
+    container_name: ha-technitium
+    hostname: ha-technitium
     restart: unless-stopped
+    network_mode: host
+
     environment:
-      TZ: "{{ ha_dns_tz }}"
-      FTLCONF_webserver_api_password: "{{ ha_dns_webpassword }}"
-      DNS1: "{{ ha_dns_upstream_1 }}"
-      DNS2: "{{ ha_dns_upstream_2 }}"
+      # Basic identity
+      DNS_SERVER_DOMAIN: "{{ ha_dns_server_domain }}"
+
+      # Admin password for web UI
+      DNS_SERVER_ADMIN_PASSWORD: "{{ ha_dns_admin_password }}"
+
+      # Web console ports
+      DNS_SERVER_WEB_SERVICE_HTTP_PORT: "{{ ha_dns_web_http_port }}"
+      DNS_SERVER_WEB_SERVICE_HTTPS_PORT: "{{ ha_dns_web_https_port }}"
+      DNS_SERVER_WEB_SERVICE_ENABLE_HTTPS: "true"
+
+      # Forwarders
+      DNS_SERVER_FORWARDERS: "{{ ha_dns_forwarders }}"
+
+      # Optional nice-to-haves
+      DNS_SERVER_ENABLE_BLOCKING: "true"
+      DNS_SERVER_LOG_USING_LOCAL_TIME: "true"
+
     volumes:
-      - "/opt/ha-dns/pihole/etc-pihole:/etc/pihole"
-      - "/opt/ha-dns/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
-    cap_add:
-      - NET_ADMIN
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/admin/ > /dev/null || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      # Technitium expects /etc/dns as config dir
+      - "{{ ha_dns_root }}/technitium:/etc/dns"
+    depends_on:
+      - keepalived
 
   keepalived:
-    image: shawly/keepalived:2.2      # or :latest if you prefer
-    container_name: keepalived-ha
-    network_mode: host
+    image: {{ ha_dns_keepalived_image }}
+    container_name: ha-dns-keepalived
     restart: unless-stopped
+    network_mode: host
     cap_add:
       - NET_ADMIN
-      - NET_RAW
       - NET_BROADCAST
+      - NET_RAW
     environment:
-      TZ: "{{ ha_dns_tz }}"
+      TZ: "America/Indiana/Indianapolis"
       KEEPALIVED_CUSTOM_CONFIG: "true"
     volumes:
-      - "/opt/ha-dns/keepalived/keepalived.conf:/etc/keepalived/keepalived.conf:ro"
-      - "/opt/ha-dns/keepalived/check_pihole.sh:/usr/local/bin/check_pihole.sh:ro"
-    depends_on:
-      - pihole
+      - "{{ ha_dns_root }}/keepalived/keepalived.conf:/etc/keepalived/keepalived.conf:ro"
+      - "{{ ha_dns_root }}/keepalived/check_dns.sh:/usr/local/bin/check_dns.sh:ro"
