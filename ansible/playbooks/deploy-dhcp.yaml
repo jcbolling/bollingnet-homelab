@@ -1,0 +1,102 @@
+---
+# =====================================================================
+# Technitium DHCP Deployment & Management
+#
+# Plays:
+#   1) Configure DHCP scopes       (tags: dhcp_scopes, dhcp_all)
+#   2) Configure DHCP reservations (tags: dhcp_reservations, dhcp_all)
+#
+# Usage:
+#   # Full DHCP setup (scopes + reservations)
+#   ansible-playbook -i inventory.yaml playbooks/deploy-dhcp.yaml --tags dhcp_all
+#
+#   # Only manage scopes
+#   ansible-playbook -i inventory.yaml playbooks/deploy-dhcp.yaml --tags dhcp_scopes
+#
+#   # Only manage reservations
+#   ansible-playbook -i inventory.yaml playbooks/deploy-dhcp.yaml --tags dhcp_reservations
+# =====================================================================
+
+#######################################################################
+# 1) CONFIGURE DHCP SCOPES
+#######################################################################
+- name: Configure Technitium DHCP scopes
+  hosts: dhcp_servers
+  gather_facts: false
+  tags:
+    - dhcp_scopes
+    - dhcp_all
+
+  vars:
+    # Adjust if you expose Technitium somewhere else, but with host networking,
+    # "http://localhost" is usually correct on each host.
+    api_url: "http://localhost"
+
+  tasks:
+    - name: Login to Technitium API (for scope management)
+      effectivelywild.technitium_dns.technitium_dns_login:
+        api_url: "{{ api_url }}"
+        username: "{{ technitium_admin_username }}"
+        password: "{{ technitium_admin_password }}"
+        validate_certs: false
+      register: api_login
+
+    - name: Ensure DHCP scopes exist and are fully configured
+      effectivelywild.technitium_dns.technitium_dns_set_dhcp_scope:
+        api_url: "{{ api_url }}"
+        api_token: "{{ api_login.token }}"
+        name: "{{ item.name }}"
+        domainName: "int.bollingnet.net"
+        domainSearchList:
+          - "int.bollingnet.net"
+        startingAddress: "{{ item.start_ip }}"
+        endingAddress: "{{ item.end_ip }}"
+        exclusions:
+          - startingAddress: "{{ item.exclusion_range_1_start }}"
+            endingAddress: "{{ item.exclusion_range_1_end }}"
+        subnetMask: "{{ item.subnet_mask }}"
+        routerAddress: "{{ item.gateway }}"
+        dnsServers: "{{ item.dns_servers }}"
+        dnsUpdates: true
+        leaseTimeDays: "{{ item.lease_time_days }}"
+        pingCheckEnabled: true
+        pingCheckRetries: 2
+        pingCheckTimeout: 1000
+      loop: "{{ dhcp_scopes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+#######################################################################
+# 2) CONFIGURE DHCP RESERVATIONS
+#######################################################################
+- name: Configure Technitium DHCP reservations
+  hosts: dhcp_servers
+  gather_facts: false
+  tags:
+    - dhcp_reservations
+    - dhcp_all
+
+  vars:
+    api_url: "http://localhost"
+
+  tasks:
+    - name: Login to Technitium API (for reservations)
+      effectivelywild.technitium_dns.technitium_dns_login:
+        api_url: "{{ api_url }}"
+        username: "{{ technitium_admin_username }}"
+        password: "{{ technitium_admin_password }}"
+        validate_certs: false
+      register: api_login
+
+    - name: Ensure static DHCP reservations exist
+      effectivelywild.technitium_dns.technitium_dns_add_reserved_lease:
+        api_url: "http://localhost"
+        api_token: "{{ api_login.token }}"
+        name: "{{ item.name }}"
+        hardwareAddress: "{{ item.mac }}"
+        ipAddress: "{{ item.ip }}"
+        hostName: "{{ item.hostname }}"
+        comments: "{{ item.comments }}"
+      loop: "{{ dhcp_reservations }}"
+      loop_control:
+        label: "{{ item.name }}"
