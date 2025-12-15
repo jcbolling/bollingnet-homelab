@@ -21,6 +21,9 @@ all:
     standalone_dns:
       hosts:
         bn-docker-03.int.bollingnet.net:
+    dhcp_servers:
+      hosts:
+        bn-docker-01.int.bollingnet.net:
     proxmox:
       hosts:
         bn-prox-01.int.bollingnet.net:
