@@ -1,0 +1,27 @@
+---
+- name: Configure System Timezone
+  hosts: all
+  become: true
+  vars:
+    system_timezone: "UTC"
+    set_timezone: "{{ set_timezone | default(false) }}"
+
+  tags:
+    - set_timezone
+
+  tasks:
+    - name: Set system timezone
+      community.general.timezone:
+        name: "{{ system_timezone }}"
+      when: set_timezone | bool
+
+    - name: Verify timezone is set correctly
+      ansible.builtin.command: timedatectl
+      register: tz_status
+      changed_when: false
+      when: set_timezone | bool
+
+    - name: Display timezone configuration
+      ansible.builtin.debug:
+        msg: "{{ tz_status.stdout_lines }}"
+      when: set_timezone | bool

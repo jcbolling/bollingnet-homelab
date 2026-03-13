@@ -1,5 +1,6 @@
 # site.yaml
 - import_playbook: update-linux-servers.yaml # noqa: name[play]
+- import_playbook: set-timezone.yaml
 
 - name: Install and configure Network UPS Tools (NUT) on Raspberry Pi Zero W's attached to UPSes
   hosts: ups_monitors
