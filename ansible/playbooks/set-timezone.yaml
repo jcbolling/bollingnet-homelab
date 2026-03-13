@@ -1,3 +1,6 @@
+# Run this playbook with the following command:
+# ansible-playbook playbooks/site.yaml --tags set_timezone -e "set_timezone=true"
+
 ---
 - name: Configure System Timezone
   hosts: all
