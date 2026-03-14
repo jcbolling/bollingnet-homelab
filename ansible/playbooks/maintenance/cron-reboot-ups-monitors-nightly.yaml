@@ -1,0 +1,12 @@
+- name: Reboot UPS monitors nightly
+  hosts: ups_monitors
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Create cron job to reboot UPS monitors nightly
+      ansible.builtin.cron:
+        name: Reboot UPS monitors nightly
+        hour: "3"
+        minute: "0"
+        job: "/usr/sbin/reboot"
