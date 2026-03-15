@@ -7,6 +7,6 @@
     - name: Create cron job to reboot UPS monitors nightly
       ansible.builtin.cron:
         name: Reboot UPS monitors nightly
-        hour: "3"
+        hour: "8"
         minute: "0"
         job: "/usr/sbin/reboot"
