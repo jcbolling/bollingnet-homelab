@@ -1,0 +1,3 @@
+# inventory/group_vars/control_plane.yaml
+kubernetes_role: control_plane
+kubeadm_bootstrap_node: bn-kube-01.int.bollingnet.net
