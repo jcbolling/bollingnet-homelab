@@ -1,0 +1,229 @@
+---
+- name: Render kubeadm init config
+  ansible.builtin.template:
+    src: kubeadm-init.yaml.j2
+    dest: "{{ kubernetes_control_plane_kubeadm_init_config_path }}"
+    mode: "0600"
+
+- name: Initialize bootstrap control-plane node
+  ansible.builtin.command:
+    cmd: "kubeadm init --config {{ kubernetes_control_plane_kubeadm_init_config_path }} --upload-certs"
+    creates: /etc/kubernetes/admin.conf
+  register: kubernetes_control_plane_kubeadm_init_result
+
+- name: Wait for API server to be ready
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes
+  retries: 20
+  delay: 10
+  register: kubernetes_control_plane_api_ready
+  until: kubernetes_control_plane_api_ready.rc == 0
+  changed_when: false
+
+- name: Approve pending kubelet serving CSRs
+  ansible.builtin.shell: |
+    set -euo pipefail
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf get csr --no-headers \
+      | awk '{print $1}' \
+      | xargs --no-run-if-empty kubectl --kubeconfig=/etc/kubernetes/admin.conf certificate approve
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Deploy CoreDNS addon
+  ansible.builtin.command:
+    cmd: kubeadm init phase addon coredns --config {{ kubernetes_control_plane_kubeadm_init_config_path }}
+  changed_when: true
+
+- name: Deploy kube-proxy addon
+  ansible.builtin.command:
+    cmd: kubeadm init phase addon kube-proxy --config {{ kubernetes_control_plane_kubeadm_init_config_path }}
+  changed_when: true
+
+- name: Install kubernetes Python library
+  ansible.builtin.apt:
+    name: python3-kubernetes
+    state: present
+    update_cache: false
+
+- name: Grant kubernetes-admin cluster-admin
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: kubernetes-admin-cluster-admin
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+      subjects:
+        - kind: User
+          name: kubernetes-admin
+          apiGroup: rbac.authorization.k8s.io
+
+- name: Configure kubectl for root
+  ansible.builtin.shell: |
+    set -euo pipefail
+    mkdir -p /root/.kube
+    cp /etc/kubernetes/admin.conf /root/.kube/config
+    chown root:root /root/.kube/config
+  args:
+    executable: /bin/bash
+    creates: /root/.kube/config
+
+- name: Upload certs again if already initialized
+  ansible.builtin.command:
+    cmd: kubeadm init phase upload-certs --upload-certs
+  register: kubernetes_control_plane_kubeadm_upload_certs_result
+  changed_when: true
+  when: not kubernetes_control_plane_kubeadm_init_result.changed
+
+- name: Generate fresh join command and extract facts
+  ansible.builtin.shell: |
+    set -euo pipefail
+    JOIN=$(kubeadm token create --print-join-command 2>/dev/null | tail -1)
+    TOKEN=$(echo "$JOIN" | grep -oP '(?<=--token )\S+')
+    HASH=$(echo "$JOIN" | grep -oP '(?<=--discovery-token-ca-cert-hash )\S+')
+    printf '%s\n%s\n' "$TOKEN" "$HASH"
+  args:
+    executable: /bin/bash
+  register: kubernetes_control_plane_join_facts
+  changed_when: true
+
+- name: Set join token and CA hash
+  ansible.builtin.set_fact:
+    kubernetes_control_plane_kubeadm_join_token: "{{ kubernetes_control_plane_join_facts.stdout_lines[0] }}"
+    kubernetes_control_plane_kubeadm_ca_cert_hash: "{{ kubernetes_control_plane_join_facts.stdout_lines[1] }}"
+
+- name: Extract certificate key from kubeadm init output when available
+  ansible.builtin.shell: |
+    echo "{{ kubernetes_control_plane_kubeadm_init_result.stdout }}" | grep -oP '(?<=--certificate-key )\S+'
+  register: kubernetes_control_plane_kubeadm_certificate_key_init
+  changed_when: false
+  when:
+    - kubernetes_control_plane_kubeadm_init_result.changed
+    - kubernetes_control_plane_kubeadm_init_result.stdout is defined
+    - "'--certificate-key' in kubernetes_control_plane_kubeadm_init_result.stdout"
+
+- name: Set certificate key from kubeadm init output
+  ansible.builtin.set_fact:
+    kubernetes_control_plane_kubeadm_certificate_key: "{{ kubernetes_control_plane_kubeadm_certificate_key_init.stdout | trim }}"
+  when:
+    - kubernetes_control_plane_kubeadm_certificate_key_init is defined
+    - kubernetes_control_plane_kubeadm_certificate_key_init.stdout is defined
+    - kubernetes_control_plane_kubeadm_certificate_key_init.stdout | trim | length > 0
+
+- name: Extract certificate key from upload-certs output when not already set
+  ansible.builtin.shell: |
+    echo "{{ kubernetes_control_plane_kubeadm_upload_certs_result.stdout }}" | grep -oP '[a-f0-9]{64}'
+  register: kubernetes_control_plane_kubeadm_certificate_key_upload
+  changed_when: false
+  when:
+    - kubernetes_control_plane_kubeadm_certificate_key is not defined
+    - kubernetes_control_plane_kubeadm_upload_certs_result is defined
+    - kubernetes_control_plane_kubeadm_upload_certs_result.stdout is defined
+
+- name: Set certificate key from upload-certs output
+  ansible.builtin.set_fact:
+    kubernetes_control_plane_kubeadm_certificate_key: "{{ kubernetes_control_plane_kubeadm_certificate_key_upload.stdout | trim }}"
+  when:
+    - kubernetes_control_plane_kubeadm_certificate_key is not defined
+    - kubernetes_control_plane_kubeadm_certificate_key_upload is defined
+    - kubernetes_control_plane_kubeadm_certificate_key_upload.stdout is defined
+    - kubernetes_control_plane_kubeadm_certificate_key_upload.stdout | trim | length > 0
+
+- name: Fail if join facts could not be determined
+  ansible.builtin.fail:
+    msg: >-
+      Failed to determine kubeadm join token, CA cert hash, or certificate key.
+      Check stdout from kubeadm init, kubeadm token create, and kubeadm init phase upload-certs.
+  when:
+    - kubernetes_control_plane_kubeadm_join_token is not defined
+      or kubernetes_control_plane_kubeadm_ca_cert_hash is not defined
+      or kubernetes_control_plane_kubeadm_certificate_key is not defined
+
+- name: Upload all kubeadm config to cluster
+  ansible.builtin.command:
+    cmd: kubeadm init phase upload-config all --config {{ kubernetes_control_plane_kubeadm_init_config_path }}
+  changed_when: true
+
+- name: Ensure cluster-info ConfigMap exists for kubeadm join
+  ansible.builtin.command:
+    cmd: kubeadm init phase bootstrap-token
+  changed_when: true
+
+- name: Allow anonymous access to cluster-info for kubeadm join
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: kubeadm:bootstrap-signer-clusterinfo
+        namespace: kube-public
+      rules:
+        - apiGroups: [""]
+          resources: ["configmaps"]
+          verbs: ["get"]
+
+- name: Bind anonymous user to cluster-info role
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: kubeadm:bootstrap-signer-clusterinfo
+        namespace: kube-public
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: kubeadm:bootstrap-signer-clusterinfo
+      subjects:
+        - apiGroup: rbac.authorization.k8s.io
+          kind: User
+          name: system:anonymous
+
+- name: Deploy Flannel CNI
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    src: https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+- name: Deploy kube-vip cloud provider
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    src: https://raw.githubusercontent.com/kube-vip/kube-vip-cloud-provider/main/manifest/kube-vip-cloud-controller.yaml
+
+- name: Configure kube-vip load balancer IP pool
+  kubernetes.core.k8s:
+    kubeconfig: /etc/kubernetes/admin.conf
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: kubevip
+        namespace: kube-system
+      data:
+        range-global: "{{ kube_vip_lb_range }}"
+
+- name: Wait for Flannel pods to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: /etc/kubernetes/admin.conf
+    kind: Pod
+    namespace: kube-flannel
+    label_selectors:
+      - app=flannel
+  register: flannel_pods
+  retries: 20
+  delay: 10
+  until:
+    - flannel_pods.resources | length > 0
+    - flannel_pods.resources | selectattr('status.phase', 'eq', 'Running') | list | length == flannel_pods.resources | length

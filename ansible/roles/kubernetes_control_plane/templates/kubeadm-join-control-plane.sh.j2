@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+kubeadm join {{ kube_vip_address }}:6443 \
+  --token {{ kubernetes_control_plane_kubeadm_join_token }} \
+  --discovery-token-ca-cert-hash {{ kubernetes_control_plane_kubeadm_ca_cert_hash }} \
+  --control-plane \
+  --certificate-key {{ kubernetes_control_plane_kubeadm_certificate_key }}

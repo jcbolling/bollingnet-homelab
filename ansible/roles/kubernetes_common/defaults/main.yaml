@@ -1,0 +1,13 @@
+# roles/kubernetes_common/defaults/main.yaml
+---
+kubernetes_common_kubernetes_packages:
+  - kubelet
+  - kubeadm
+  - kubectl
+
+kubernetes_common_kubernetes_base_packages:
+  - apt-transport-https
+  - ca-certificates
+  - containerd
+  - curl
+  - gpg

@@ -1,0 +1,30 @@
+---
+- name: Fail if bootstrap node has not published join facts yet
+  ansible.builtin.fail:
+    msg: >-
+      kubeadm join facts are not available from {{ kubeadm_bootstrap_node }}.
+      Run the bootstrap control-plane play first.
+  when:
+    - hostvars[kubeadm_bootstrap_node].kubernetes_control_plane_kubeadm_join_token is not defined
+      or hostvars[kubeadm_bootstrap_node].kubernetes_control_plane_kubeadm_ca_cert_hash is not defined
+      or hostvars[kubeadm_bootstrap_node].kubernetes_control_plane_kubeadm_certificate_key is not defined
+
+- name: Copy join facts from bootstrap node
+  ansible.builtin.set_fact:
+    kubernetes_control_plane_kubeadm_join_token: >-
+      {{ hostvars[kubeadm_bootstrap_node].kubernetes_control_plane_kubeadm_join_token }}
+    kubernetes_control_plane_kubeadm_ca_cert_hash: >-
+      {{ hostvars[kubeadm_bootstrap_node].kubernetes_control_plane_kubeadm_ca_cert_hash }}
+    kubernetes_control_plane_kubeadm_certificate_key: >-
+      {{ hostvars[kubeadm_bootstrap_node].kubernetes_control_plane_kubeadm_certificate_key }}
+
+- name: Render control-plane join script
+  ansible.builtin.template:
+    src: kubeadm-join-control-plane.sh.j2
+    dest: "{{ kubernetes_control_plane_kubeadm_join_script_path }}"
+    mode: "0700"
+
+- name: Join additional control-plane node
+  ansible.builtin.command:
+    cmd: "{{ kubernetes_control_plane_kubeadm_join_script_path }}"
+    creates: /etc/kubernetes/kubelet.conf
