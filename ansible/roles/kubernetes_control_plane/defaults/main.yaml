@@ -1,0 +1,4 @@
+---
+kubernetes_control_plane_kubeadm_init_config_path: /root/kubeadm-init.yaml
+kubernetes_control_plane_kubeadm_join_script_path: /root/kubeadm-join-control-plane.sh
+kubernetes_control_plane_kubeconfig_path: /etc/kubernetes/admin.conf

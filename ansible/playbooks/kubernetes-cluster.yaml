@@ -1,0 +1,124 @@
+# kubernetes-cluster.yaml
+---
+- name: Prepare all Kubernetes nodes
+  hosts: kubernetes_cluster
+  become: true
+  gather_facts: true
+  tags:
+    - node_prep
+
+  roles:
+    - kubernetes_common
+
+- name: Initialize first control-plane node
+  hosts: "{{ kubeadm_bootstrap_node }}"
+  become: true
+  gather_facts: true
+  tags:
+    - bootstrap_control_plane
+
+  roles:
+    - role: kubernetes_control_plane
+      tags:
+        - kubernetes_control_plane
+
+- name: Configure kube-vip on bootstrap control-plane node
+  hosts: "{{ kubeadm_bootstrap_node }}"
+  become: true
+  gather_facts: true
+  tags:
+    - kube_vip
+    - bootstrap_control_plane
+    - bootstrap_kube_vip
+
+  roles:
+    - role: kube_vip
+      tags:
+        - kube_vip
+
+- name: Generate join token on bootstrap node
+  hosts: "{{ kubeadm_bootstrap_node }}"
+  become: true
+  gather_facts: false
+  tags:
+    - join_control_plane
+    - join_workers
+
+  tasks:
+    - name: Generate fresh join command and extract facts
+      ansible.builtin.shell: |
+        set -euo pipefail
+        JOIN=$(kubeadm token create --print-join-command 2>/dev/null | tail -1)
+        TOKEN=$(echo "$JOIN" | grep -oP '(?<=--token )\S+')
+        HASH=$(echo "$JOIN" | grep -oP '(?<=--discovery-token-ca-cert-hash )\S+')
+        printf '%s\n%s\n' "$TOKEN" "$HASH"
+      args:
+        executable: /bin/bash
+      register: kubernetes_control_plane_join_facts
+      changed_when: true
+
+    - name: Set join token and CA hash
+      ansible.builtin.set_fact:
+        kubernetes_control_plane_kubeadm_join_token: "{{ kubernetes_control_plane_join_facts.stdout_lines[0] }}"
+        kubernetes_control_plane_kubeadm_ca_cert_hash: "{{ kubernetes_control_plane_join_facts.stdout_lines[1] }}"
+
+- name: Join remaining control-plane nodes
+  hosts: additional_control_plane
+  become: true
+  gather_facts: true
+  tags:
+    - join_control_plane
+
+  roles:
+    - role: kubernetes_control_plane
+      tags:
+        - kubernetes_control_plane
+
+- name: Configure kube-vip on additional control-plane nodes
+  hosts: additional_control_plane
+  become: true
+  gather_facts: true
+  tags:
+    - kube_vip
+    - join_kube_vip
+
+  roles:
+    - role: kube_vip
+      tags:
+        - kube_vip
+
+- name: Join worker nodes
+  hosts: workers
+  become: true
+  gather_facts: true
+  tags:
+    - join_workers
+
+  roles:
+    - role: kubernetes_worker
+      tags:
+        - kubernetes_worker
+
+- name: Cluster setup complete
+  hosts: "{{ kubeadm_bootstrap_node }}"
+  become: false
+  gather_facts: false
+  tags:
+    - join_workers
+
+  tasks:
+    - name: Print kubeconfig instructions
+      ansible.builtin.debug:
+        msg: |
+          ============================================================
+          Cluster setup complete!
+
+          The kubeconfig file is located on the bootstrap node at:
+            /etc/kubernetes/admin.conf
+
+          To copy it to your local machine, run:
+            scp <user>@<bootstrap-node>:/etc/kubernetes/admin.conf ~/.kube/config
+
+          Verify access with:
+            kubectl get nodes
+          ============================================================

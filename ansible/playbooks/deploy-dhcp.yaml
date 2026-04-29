@@ -51,9 +51,7 @@
           - "int.bollingnet.net"
         startingAddress: "{{ item.start_ip }}"
         endingAddress: "{{ item.end_ip }}"
-        exclusions:
-          - startingAddress: "{{ item.exclusion_range_1_start }}"
-            endingAddress: "{{ item.exclusion_range_1_end }}"
+        exclusions: "{{ item.exclusions | default([]) }}"
         subnetMask: "{{ item.subnet_mask }}"
         routerAddress: "{{ item.gateway }}"
         dnsServers: "{{ item.dns_servers }}"

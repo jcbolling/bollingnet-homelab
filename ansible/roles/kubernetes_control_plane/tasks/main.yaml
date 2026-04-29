@@ -1,0 +1,8 @@
+---
+- name: Bootstrap first control-plane node
+  ansible.builtin.include_tasks: /Users/josh/repos/bollingnet-homelab/ansible/roles/kubernetes_control_plane/tasks/bootstrap.yaml
+  when: inventory_hostname == kubeadm_bootstrap_node
+
+- name: Join additional control-plane nodes
+  ansible.builtin.include_tasks: /Users/josh/repos/bollingnet-homelab/ansible/roles/kubernetes_control_plane/tasks/join.yaml
+  when: inventory_hostname != kubeadm_bootstrap_node

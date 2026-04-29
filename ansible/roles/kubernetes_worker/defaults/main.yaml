@@ -1,0 +1,2 @@
+---
+kubernetes_worker_kubeadm_join_script_path: /root/kubeadm-join-worker.sh

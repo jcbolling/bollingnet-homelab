@@ -9,6 +9,20 @@ all:
         bn-kube-04.int.bollingnet.net:
         bn-kube-05.int.bollingnet.net:
         bn-kube-06.int.bollingnet.net:
+    control_plane:
+      hosts:
+        bn-kube-01.int.bollingnet.net:
+        bn-kube-02.int.bollingnet.net:
+        bn-kube-03.int.bollingnet.net:
+    additional_control_plane:
+      hosts:
+        bn-kube-02.int.bollingnet.net:
+        bn-kube-03.int.bollingnet.net:
+    workers:
+      hosts:
+        bn-kube-04.int.bollingnet.net:
+        bn-kube-05.int.bollingnet.net:
+        bn-kube-06.int.bollingnet.net:
     docker:
       hosts:
         bn-docker-01.int.bollingnet.net:

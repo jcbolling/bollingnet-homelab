@@ -1,0 +1,11 @@
+# inventory/group_vars/kubernetes_cluster.yaml
+kubernetes_version_minor: "v1.35"
+cluster_name: "bollingnet"
+kube_vip_address: "10.0.4.10"
+pod_subnet: "10.244.0.0/16"
+service_subnet: "10.96.0.0/12"
+kube_vip_version: "v1.1.2"
+kube_vip_lb_range: "10.0.4.210-10.0.4.254"
+
+kube_node_ip: "{{ kube_node_ip_override | default(ansible_default_ipv4.address) }}"
+kube_vip_interface: "{{ kube_vip_interface_override | default(ansible_default_ipv4.interface) }}"
