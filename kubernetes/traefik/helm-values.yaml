@@ -1,0 +1,107 @@
+# helm-values.yaml
+
+# Use the helm chart's built-in support for creating an IngressRoute for the
+# Traefik dashboard. Requests matching the host and path prefix are served by
+# Traefik's built-in api@internal service.
+ingressRoute:
+  dashboard:
+    enabled: true
+    # Match requests to the dashboard and API paths. The /api prefix is needed
+    # because the dashboard UI makes backend calls to /api/... to populate itself.
+    matchRule: Host(`traefik.int.bollingnet.net`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+    # Register this route on both entrypoints so it matches both the initial
+    # HTTP request and the HTTPS request that follows the port 80 redirect.
+    entryPoints:
+      - web
+      - websecure
+
+ports:
+  web:
+    asDefault: true
+    port: 80
+    expose:
+      default: true
+    exposedPort: 80
+    http:
+      redirections:
+        # Redirect all HTTP traffic on port 80 to HTTPS on port 443. This fires
+        # before any IngressRoute matching, so every request is upgraded to HTTPS
+        # before routing decisions are made.
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+providers:
+  # Tell Traefik to watch the cluster for Kubernetes Gateway API resources
+  # (Gateway, HTTPRoute, etc.) and use them as a source of routing config.
+  kubernetesGateway:
+    enabled: true
+
+gateway:
+  namespace: traefik # Setting explicitly but this should automatically align with the namespace where Traefik is deployed
+  listeners:
+    # Create a Gateway listener on port 80 that accepts traffic from all
+    # namespaces in the cluster, allowing any namespace to define HTTPRoutes
+    # that attach to this Gateway.
+    web:
+      port: 80
+      namespacePolicy:
+        from: All
+
+extraObjects:
+  # Redirect /dashboard → /dashboard/
+  # The Traefik dashboard requires a trailing slash. This middleware catches
+  # requests to /dashboard with no trailing slash and issues a permanent
+  # redirect. The $ anchor ensures /dashboard/something is not affected.
+  - apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: dashboard-redirect
+      namespace: traefik
+    spec:
+      redirectRegex:
+        regex: ^https://traefik\.int\.bollingnet\.net/dashboard$
+        replacement: https://traefik.int.bollingnet.net/dashboard/
+        permanent: true
+
+  # Redirect bare host → /dashboard/
+  # This middleware catches requests to the root path and redirects to the
+  # dashboard, so browsing to traefik.int.bollingnet.net lands on the dashboard
+  # rather than a 404.
+  - apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: root-redirect
+      namespace: traefik
+    spec:
+      redirectRegex:
+        regex: ^https://traefik\.int\.bollingnet\.net/?$
+        replacement: https://traefik.int.bollingnet.net/dashboard/
+        permanent: true
+
+  # IngressRoute to catch the bare host and apply the root-redirect middleware.
+  # This is a separate IngressRoute from the dashboard one above because the
+  # dashboard IngressRoute only matches /dashboard and /api prefixes — it would
+  # never see a bare / request, so there is nothing to attach the middleware to.
+  - apiVersion: traefik.io/v1alpha1
+    kind: IngressRoute
+    metadata:
+      name: traefik-root-redirect
+      namespace: traefik
+    spec:
+      entryPoints:
+        - web
+        - websecure
+      routes:
+        - match: Host(`traefik.int.bollingnet.net`) && Path(`/`)
+          kind: Rule
+          middlewares:
+            - name: root-redirect
+              namespace: traefik
+          # api@internal is Traefik's built-in service that backs the dashboard.
+          # A service is required by the IngressRoute spec even though this route
+          # only exists to fire a redirect and will never actually forward traffic.
+          services:
+            - name: api@internal
+              kind: TraefikService
