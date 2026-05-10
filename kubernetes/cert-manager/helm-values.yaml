@@ -1,0 +1,12 @@
+namespace: "cert-manager"
+crds:
+  enabled: true
+extraArgs:
+# Use only recursive nameservers for DNS-01 self-checks, so cert-manager's propagation
+# check mirrors what Let's Encrypt will see, rather than querying internal authoritative
+# servers that may resolve records not visible on the public internet.
+#
+# Without this, internal DNS could cause cert-manager to conclude the ACME challenge
+# has propagated before it's publicly visible, resulting in failed Let's Encrypt validations.
+- --dns01-recursive-nameservers-only
+- --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53

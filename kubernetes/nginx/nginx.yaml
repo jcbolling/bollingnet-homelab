@@ -50,5 +50,4 @@ spec:
       kind: Rule
       services:
         - name: nginx
-          namespace: nginx
           port: 80
