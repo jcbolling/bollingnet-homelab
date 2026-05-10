@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: traefik-dashboard
+  namespace: traefik
+spec:
+  secretName: tls-traefik-dashboard
+  commonName: traefik.int.bollingnet.net
+  dnsNames:
+    - traefik.int.bollingnet.net
+  issuerRef:
+    name: cloudflare-dns-cluster-issuer # This should match the name of the ClusterIssuer defined in cluster-issuer.yaml
+    kind: ClusterIssuer
