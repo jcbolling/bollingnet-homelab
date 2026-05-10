@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cloudflare-dns-cluster-issuer # Naming convention follows <provider>-<challengetype>-cluster-issuer
+spec:
+  acme:
+    email: josh.bolling+letsencrypt@bollingnet.net # Email address for Let's Encrypt account registration and expiry notices
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-account-key # cert-manager will create this secret automatically
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: secret-cloudflare-api-token
+              key: api-token # Maps to the api-token key in the secret-cloudflare-api-token secret in the cert-manager namespace
