@@ -1,0 +1,271 @@
+# Deploying cert-manager with Helm
+
+This guide walks through deploying cert-manager on Kubernetes using the official Helm chart, including configuring a Cloudflare DNS-01 `ClusterIssuer` and requesting certificates for internal hostnames.
+
+## Prerequisites
+
+- A running Kubernetes cluster
+- `kubectl` configured to talk to your cluster
+- Helm installed (`brew install helm` or see [helm.sh](https://helm.sh))
+- A domain hosted on Cloudflare
+- A Cloudflare API token with DNS edit permissions scoped to your zone
+
+## Add the cert-manager Helm Repository
+
+```bash\
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+```
+
+## Install cert-manager
+
+cert-manager requires its Custom Resource Definitions (CRDs) to be installed before the controller. The `--set crds.enabled=true` flag handles this automatically:
+
+```bash
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
+```
+
+Verify the installation is healthy before proceeding:
+
+```bash
+kubectl get pods -n cert-manager
+```
+
+All three pods (`cert-manager`, `cert-manager-cainjector`, and `cert-manager-webhook`) should be in the `Running` state.
+
+---
+
+## Configure Secrets
+
+cert-manager needs access to your Cloudflare API token to create and delete DNS TXT records during DNS-01 challenges. Store this as a Kubernetes Secret in the `cert-manager` namespace.
+
+> **Important:** Never commit this file to version control. Add it to `.gitignore` immediately.
+
+```yaml
+# issuer-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-credentials
+  namespace: cert-manager
+type: Opaque
+stringData:
+  api-token: YOUR-CLOUDFLARE-API-TOKEN
+```
+
+> **Note:** Using `stringData` instead of `data` allows you to store the value as plaintext — Kubernetes will base64-encode it automatically on apply. If you use `data` instead, you must base64-encode the value yourself: `echo -n "your-token" | base64`.
+
+Apply the secrets file:
+
+```bash
+kubectl apply -f issuer-secrets.yaml
+```
+
+---
+
+## Configure the ClusterIssuer
+
+A `ClusterIssuer` is a cluster-scoped resource that defines how cert-manager requests certificates. Unlike a namespaced `Issuer`, a `ClusterIssuer` can serve certificate requests from any namespace in the cluster.
+
+> **Note:** `ClusterIssuer` can only reference Secrets in the `cert-manager` namespace, regardless of where the `Certificate` resource itself is created.
+
+```yaml
+# cloudflare-dns-issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cloudflare-dns-issuer
+spec:
+  acme:
+    # Your email address for Let's Encrypt account registration and expiry notices.
+    email: YOUR-EMAIL@YOUR-DOMAIN.COM
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      # cert-manager will create this Secret automatically to store your
+      # Let's Encrypt account private key.
+      name: letsencrypt-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-credentials
+              key: api-token
+        selector:
+          # Restrict this solver to domains under your zone.
+          # Remove the selector block to use this issuer for all domains.
+          dnsZones:
+            - YOUR-DOMAIN.COM
+```
+
+> **Note:** The `email` field under `acme` is a plain string and does not support referencing a Secret. It is used by Let's Encrypt for account registration and expiry notices only, not as a credential.
+
+Apply the issuer:
+
+```bash
+kubectl apply -f cloudflare-dns-issuer.yaml
+```
+
+Verify the issuer is ready:
+
+```bash
+kubectl describe clusterissuer cloudflare-dns-issuer
+```
+
+The `Status` section should show `Ready: True`. If it does not, check the cert-manager logs:
+
+```bash
+kubectl logs -n cert-manager deployment/cert-manager -f
+```
+
+---
+
+## Request a Certificate
+
+Certificates are requested by creating a `Certificate` resource. cert-manager will handle the DNS-01 challenge automatically and store the resulting certificate in the Secret named by `spec.secretName`.
+
+```yaml
+# example-certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-example
+  namespace: YOUR-APP-NAMESPACE
+spec:
+  secretName: tls-example
+  issuerRef:
+    name: cloudflare-dns-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - example.YOUR-DOMAIN.COM
+```
+
+Apply it:
+
+```bash
+kubectl apply -f example-certificate.yaml
+```
+
+Watch the certificate status:
+
+```bash
+kubectl describe certificate tls-example -n YOUR-APP-NAMESPACE
+```
+
+cert-manager will progress through the following stages before the certificate is issued:
+
+```
+Certificate → CertificateRequest → Order → Challenge → (DNS-01 validation) → Certificate Ready
+```
+
+You can inspect each stage if something goes wrong:
+
+```bash
+kubectl describe certificaterequest -n YOUR-APP-NAMESPACE
+kubectl describe order -n YOUR-APP-NAMESPACE
+kubectl describe challenge -n YOUR-APP-NAMESPACE
+```
+
+Once the certificate is issued, the Secret named `tls-example` will contain `tls.crt` and `tls.key` and can be referenced by an `IngressRoute` or other resource.
+
+---
+
+## Using the Certificate with Traefik
+
+Reference the Secret created by cert-manager in your Traefik `IngressRoute` or Helm values:
+
+```yaml
+tls:
+  secretName: tls-example
+```
+
+The Secret must be in the same namespace as the `IngressRoute` that references it. If your `IngressRoute` and `Certificate` are in different namespaces, either move the `Certificate` to the correct namespace or use a tool like Reflector to sync Secrets across namespaces.
+
+---
+
+## Delete the Certificate
+
+Delete the Certificate resource and the Secret it created:
+
+```bash
+kubectl delete certificate tls-example -n YOUR-APP-NAMESPACE
+kubectl delete secret tls-example -n YOUR-APP-NAMESPACE
+```
+
+cert-manager does not automatically delete the Secret when you delete the Certificate resource, so you need to delete both manually. The Cloudflare TXT record used for validation is cleaned up automatically by cert-manager immediately after issuance, so there's nothing to clean up on the Cloudflare side.
+
+## How DNS-01 Validation Works
+
+DNS-01 is the only ACME challenge type that works for internal or private hostnames, since it does not require the host to be publicly reachable. Instead, Let's Encrypt verifies domain ownership by checking for a TXT record in the public DNS zone.
+
+```
+cert-manager creates _acme-challenge.example.YOUR-DOMAIN.COM TXT record via Cloudflare API
+         ↓
+cert-manager polls public DNS until the record is visible
+         ↓
+cert-manager signals Let's Encrypt to validate
+         ↓
+Let's Encrypt queries the TXT record and issues the certificate
+         ↓
+cert-manager stores the certificate in the specified Secret
+         ↓
+cert-manager deletes the TXT record
+```
+
+The entire process typically takes 2–5 minutes. cert-manager uses only recursive nameservers (configured via `--dns01-recursive-nameservers`) for its propagation check, so its view of DNS matches what Let's Encrypt will see rather than what internal DNS resolves.
+
+> **Note:** Your actual hosts never need to be internet-facing for DNS-01 to work. The domain only needs to be hosted on a publicly accessible DNS provider — in this case Cloudflare — so that Let's Encrypt can query the TXT record.
+
+---
+
+## Helm Values for DNS-01 Recursive Nameservers
+
+If your cluster runs internal DNS that is authoritative for your domain, configure cert-manager to use only public recursive resolvers for its DNS-01 self-check. Add the following to a `helm-values.yaml` for cert-manager:
+
+```yaml
+# cert-manager-helm-values.yaml
+extraArgs:
+  # Use only recursive nameservers for DNS-01 self-checks, so cert-manager's
+  # propagation check mirrors what Let's Encrypt will see, rather than querying
+  # internal authoritative servers that may resolve records not visible on the
+  # public internet.
+  #
+  # Without this, internal DNS could cause cert-manager to conclude the ACME
+  # challenge has propagated before it's publicly visible, resulting in failed
+  # Let's Encrypt validations.
+  - --dns01-recursive-nameservers-only
+  - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
+```
+
+Then install or upgrade using the values file:
+
+```bash
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true \
+  --values cert-manager-helm-values.yaml
+```
+
+---
+
+## Production Considerations
+
+| Topic | Homelab | Production |
+|---|---|---|
+| ACME server | Use production (`acme-v02`) | Use staging first to avoid rate limits during testing |
+| Secret management | Plain `issuer-secrets.yaml` in `.gitignore` | Use Sealed Secrets, Vault, or External Secrets Operator |
+| Certificate scope | One `ClusterIssuer` for all domains | Consider separate issuers per environment or zone |
+| Monitoring | Check certificate status manually | Alert on `Certificate` resources approaching expiry |
+
+### Let's Encrypt Staging Server
+
+When testing your setup for the first time, use the Let's Encrypt staging server to avoid hitting production rate limits. Replace the `server` field in your `ClusterIssuer`:
+
+```yaml
+server: https://acme-staging-v02.api.letsencrypt.org/directory
+```
+
+Staging certificates are not trusted by browsers but are otherwise functionally identical. Once everything is working, switch to the production server and delete and recreate any staging certificates.
