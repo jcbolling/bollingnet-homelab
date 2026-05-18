@@ -1,0 +1,78 @@
+---
+- name: Install Longhorn dependencies
+  hosts: workers
+  become: true
+
+  tasks:
+
+    # ── Packages ────────────────────────────────────────────────────────────────
+
+    - name: Install nfs-common
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present
+        update_cache: true
+
+    # ── Kernel modules ──────────────────────────────────────────────────────────
+
+    - name: Load nfs kernel module now
+      community.general.modprobe:
+        name: nfs
+        state: present
+
+    - name: Load dm_crypt kernel module now
+      community.general.modprobe:
+        name: dm_crypt
+        state: present
+
+    - name: Persist kernel modules across reboots
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/longhorn.conf
+        content: |
+          nfs
+          dm_crypt
+        owner: root
+        group: root
+        mode: "0644"
+
+    # ── multipathd (warning) ────────────────────────────────────────────────────
+    # multipathd can cause Longhorn volumes to malfunction.
+    # The block below blacklists all non-iSCSI devices so multipathd
+    # ignores Longhorn block devices while still running for any
+    # legitimate multipath targets you may have.
+    # Remove this task entirely if you do not use multipath at all
+    # and prefer to disable/mask multipathd instead.
+
+    - name: Configure multipath to blacklist all devices except iSCSI
+      ansible.builtin.copy:
+        dest: /etc/multipath.conf
+        content: |
+          # Managed by Ansible – Longhorn compatibility
+          # See https://longhorn.io/kb/troubleshooting-volume-with-multipath/
+          blacklist {
+              devnode "^sd[a-z0-9]+"
+          }
+          blacklist_exceptions {
+              property "(SCSI_IDENT_|ID_WWN)"
+          }
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload multipathd
+
+    # ── iscsid ──────────────────────────────────────────────────────────────────
+    # The preflight check says iscsid is inactive but activatable via socket.
+    # Enable the socket unit so it starts on demand (Longhorn's preferred mode).
+
+    - name: Enable iscsid socket (on-demand activation)
+      ansible.builtin.systemd:
+        name: iscsid.socket
+        enabled: true
+        state: started
+
+  handlers:
+
+    - name: Reload multipathd
+      ansible.builtin.systemd:
+        name: multipathd
+        state: reloaded
