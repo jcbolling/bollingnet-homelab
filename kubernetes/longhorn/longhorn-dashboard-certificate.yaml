@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: longhorn-dashboard
+  namespace: longhorn-system
+spec:
+  secretName: tls-longhorn-dashboard
+  commonName: longhorn.int.bollingnet.net
+  dnsNames:
+    - longhorn.int.bollingnet.net
+  issuerRef:
+    name: cloudflare-dns-cluster-issuer # This should match the name of the ClusterIssuer defined in cluster-issuer.yaml
+    kind: ClusterIssuer
