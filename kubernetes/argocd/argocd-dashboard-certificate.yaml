@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  secretName: tls-argocd-server
+  commonName: argocd.int.bollingnet.net
+  dnsNames:
+    - argocd.int.bollingnet.net
+  issuerRef:
+    name: cloudflare-dns-cluster-issuer # This should match the name of the ClusterIssuer defined in cluster-issuer.yaml
+    kind: ClusterIssuer
