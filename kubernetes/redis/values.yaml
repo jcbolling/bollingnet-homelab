@@ -1,0 +1,33 @@
+# Redis Helm values
+# Chart: bitnami/redis
+# https://artifacthub.io/packages/helm/bitnami/redis
+#
+# helm install redis bitnami/redis --namespace redis --values values.yaml
+
+architecture: standalone
+
+auth:
+  enabled: true
+  existingSecret: redis-auth
+  existingSecretPasswordKey: redis-password
+
+master:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    size: 2Gi
+
+  configuration: |
+    maxmemory 896mb
+    maxmemory-policy allkeys-lru
+
+replica:
+  replicaCount: 0  # standalone mode, no replicas

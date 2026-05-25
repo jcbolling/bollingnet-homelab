@@ -13,3 +13,10 @@ spec:
   storage:
     storageClass: longhorn-single-replica
     size: 10Gi
+  managed:
+    roles:
+      - name: authentik
+        ensure: present
+        login: true
+        passwordSecret:
+          name: authentik-db-user-credentials
