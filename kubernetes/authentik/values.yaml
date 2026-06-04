@@ -1,0 +1,167 @@
+# Authentik Helm values
+# Chart: authentik/authentik
+# https://artifacthub.io/packages/helm/authentik/authentik
+#
+# helm install authentik authentik/authentik --namespace authentik --values values.yaml
+
+authentik:
+  secret_key: ""
+  log_level: info
+
+  postgresql:
+    host: ""      # read from secret, injected via env
+    name: ""      # read from secret, injected via env
+    user: ""      # read from secret, injected via env
+    password: ""  # read from secret, injected via env
+    port: 5432
+
+  redis:
+    host: redis-master.redis.svc.cluster.local
+    db: 0
+    password: ""  # read from secret, injected via env
+  email:
+    host: smtp-relay.gmail.com
+    port: 587
+    use_tls: true
+    use_ssl: false
+    timeout: 30
+    from: no-reply@bollingnet.net
+
+postgresql:
+  enabled: false # we are using an external PostgreSQL instance, so disable the internal one
+
+redis:
+  enabled: false # we are using an external Redis instance, so disable the internal one
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: cloudflare-dns-cluster-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - authentik.int.bollingnet.net
+    tls:
+      - secretName: authentik-tls
+        hosts:
+          - authentik.int.bollingnet.net
+  env:
+    - name: AUTHENTIK_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: authentik-secret-key
+          key: secret-key
+    - name: AUTHENTIK_REDIS__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-redis-auth
+          key: redis-password
+    - name: AUTHENTIK_POSTGRESQL__HOST
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: host
+    - name: AUTHENTIK_POSTGRESQL__NAME
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: database
+    - name: AUTHENTIK_POSTGRESQL__USER
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: username
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: password
+    - name: AUTHENTIK_POSTGRESQL__PORT
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: port
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+worker:
+  env:
+    - name: AUTHENTIK_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: authentik-secret-key
+          key: secret-key
+    - name: AUTHENTIK_REDIS__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-redis-auth
+          key: redis-password
+    - name: AUTHENTIK_POSTGRESQL__HOST
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: host
+    - name: AUTHENTIK_POSTGRESQL__NAME
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: database
+    - name: AUTHENTIK_POSTGRESQL__USER
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: username
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: password
+    - name: AUTHENTIK_POSTGRESQL__PORT
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-connection-details
+          key: port
+  startupProbe:
+    exec:
+      command:
+        - ak
+        - healthcheck
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 60
+    timeoutSeconds: 10    # increase from 3s to prevent false positive failures during startup
+
+  livenessProbe:
+    exec:
+      command:
+        - ak
+        - healthcheck
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 10    # increase from 3s to prevent false positive failures during startup
+
+  readinessProbe:
+    exec:
+      command:
+        - ak
+        - healthcheck
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 10    # increase from 3s to prevent false positive failures during startup
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
