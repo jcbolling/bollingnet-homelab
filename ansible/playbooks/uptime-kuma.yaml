@@ -1,0 +1,57 @@
+---
+- name: Deploy Uptime Kuma with Docker Compose
+  hosts: docker
+  become: true
+
+  vars:
+    uptime_kuma_root: /opt/uptime-kuma
+
+  tasks:
+    - name: Ensure Docker Compose plug-in
+      ansible.builtin.apt:
+        name:
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Ensure uptime-kuma directory exists
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+        recurse: true
+
+    - name: Deploy docker-compose.yml for Uptime Kuma
+      ansible.builtin.copy:
+        dest: "{{ uptime_kuma_root }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          services:
+            uptime-kuma:
+              image: louislam/uptime-kuma:2.4.0
+              container_name: uptime-kuma
+              volumes:
+                - {{ uptime_kuma_root }}:/app/data
+              ports:
+                - 3001:3001
+              restart: unless-stopped
+
+    - name: Ensure Uptime Kuma stack is up
+      community.docker.docker_compose_v2:
+        project_src: "{{ uptime_kuma_root }}"
+        state: present
+        pull: always
+      register: uptime_kuma_compose
+      notify:
+        - Output Docker Compose changes
+      when:
+        not ansible_check_mode
+
+  handlers:
+    - name: Output Docker Compose changes
+      ansible.builtin.debug:
+        var: uptime_kuma_compose
