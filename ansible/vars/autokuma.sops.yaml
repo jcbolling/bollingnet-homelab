@@ -1,0 +1,19 @@
+autokuma_kuma_username: ENC[AES256_GCM,data:2ofApfCD1uE=,iv:uqXo8cd2fOsy/URDqA1d6VwNDHQZ5GjK5QBRiY2ZroA=,tag:Juo+F8IfYfTFhMWIBMvEQw==,type:str]
+autokuma_kuma_password: ENC[AES256_GCM,data:2o1sqVRXYtCrSRksZk/wOLSQmawzdgbT4bJepFLDFmI=,iv:27K/Y/yPJ8PTMzOSQ/hVzWt1W9YLFHey9mvF3hWKFq8=,tag:m4vYb8zIYtw69XwzLLpe1g==,type:str]
+autokuma_kuma_notification_app_token: ENC[AES256_GCM,data:tBCO3TW9pebMoinWRtQOj3EJ3GutpcCWxi2xacG8,iv:JsyvmQpIthH6FPMcnEspAf0lOf/cIDI3flkxRyUOeTU=,tag:ANXCJVeJtALmxsDeIeKcZg==,type:str]
+autokuma_kuma_notification_user_key: ENC[AES256_GCM,data:y1cnfAyuGbejExU2D4plkfekovoVuiVFkkXNmI7+,iv:/CjMYcTi3K6OfOcZUjYaC42hm/kH5hCuH+eFQIYY0cQ=,tag:WcHmxcz+Fv7W+8GJD5FyDA==,type:str]
+sops:
+    age:
+        - recipient: age1trzalmfzy22xjj8mrdrgj4n063ve90wj049szwqa33slhny3hpnqr06t8u
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBjTzNaLzFtbTBQMUtHbFZX
+            VE5mWUJJcThKYTllNVFDbVcrSFlPTlVWdkRVCkxhY0xrR3dreXBUQjErMmxLdWRQ
+            L01XSE9jYTN2b2RIWGFpdE90a2tJL1EKLS0tIDYxSitTdUkyNlhHRGJMM2RjRm94
+            L3FuRURNL0lKQTAraFZrWURGNW1CLzgKjdAObHbVCjaf2y5fvv2gQDhKcZh9umKo
+            ruaQrCkRQGnsNR87Pnxeyn4S0avDfPRiIlrYjAeE04QTZz9002WvmA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-06-09T23:12:13Z"
+    mac: ENC[AES256_GCM,data:LV8XJ15GnIcXwUG3vXi1F5ufRuIrI1vuxMJoRQiXJ/fn1oKJ/B0gGPGfdYXr+ki/SNDWneRTYnaH7sMiUw7Laa/2YpPZeQKY7Wg01CEDYYTzmaGBN/PgUtPZPa2tp3DvUMRFG7zp3vbmRAIBPgjMeQiXX4VLp7oW1FCFocVn0i0=,iv:bxDHfr+yMuCKlS8DRVMUg4KVFQ9ICRuknEGppOaS03g=,tag:T/+8M4HGjddZIBfnZbB7Jw==,type:str]
+    encrypted_regex: .*
+    version: 3.11.0
