@@ -1,0 +1,16 @@
+services:
+  autokuma:
+    image: {{ autokuma_image }}
+    container_name: {{ autokuma_container_name }}
+    network_mode: host
+    environment:
+      AUTOKUMA__KUMA__URL: "{{ autokuma_kuma_url }}"
+      AUTOKUMA__KUMA__USERNAME: "{{ autokuma_kuma_username }}"
+      AUTOKUMA__KUMA__PASSWORD: "{{ autokuma_kuma_password }}"
+      AUTOKUMA__DOCKER__ENABLED: "{{ autokuma_docker_enabled | lower }}"
+      AUTOKUMA__STATIC_MONITORS: /autokuma/static
+      AUTOKUMA__ON_DELETE: "{{ autokuma_on_delete }}"
+    volumes:
+      - {{ autokuma_root }}/static:/autokuma/static
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

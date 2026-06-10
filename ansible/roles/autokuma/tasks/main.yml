@@ -1,0 +1,58 @@
+---
+- name: Ensure AutoKuma directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ autokuma_root }}"
+    - "{{ autokuma_root }}/static"
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ autokuma_root }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart AutoKuma
+
+- name: Deploy static group files
+  ansible.builtin.copy:
+    dest: "{{ autokuma_root }}/static/{{ item.filename }}.json"
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ item.config | to_nice_json }}"
+  loop: "{{ autokuma_groups }}"
+  loop_control:
+    label: "{{ item.filename }}"
+
+- name: Deploy static monitor files
+  ansible.builtin.copy:
+    dest: "{{ autokuma_root }}/static/{{ item.filename }}.json"
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ item.config | to_nice_json }}"
+  loop: "{{ autokuma_monitors }}"
+  loop_control:
+    label: "{{ item.filename }}"
+
+- name: Deploy notification file
+  ansible.builtin.copy:
+    dest: "{{ autokuma_root }}/static/notification.json"
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ autokuma_notification | to_nice_json }}"
+  when: autokuma_notification | length > 0
+
+- name: Ensure AutoKuma stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ autokuma_root }}"
+    state: present
+    pull: always
+  when: not ansible_check_mode

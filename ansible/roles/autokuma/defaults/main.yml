@@ -1,0 +1,18 @@
+---
+autokuma_root: /opt/autokuma
+autokuma_image: ghcr.io/bigboot/autokuma:2.0.0
+autokuma_container_name: autokuma
+
+autokuma_kuma_url: http://localhost:3001
+autokuma_kuma_username: "" # provide via SOPS-encrypted vars
+autokuma_kuma_password: ""  # provide via SOPS-encrypted vars
+
+autokuma_docker_enabled: true
+autokuma_on_delete: delete
+
+# Static monitors, groups, and notifications
+# Each item in autokuma_groups and autokuma_monitors is written to a separate JSON file.
+# autokuma_notification is written to a single notification.json file.
+autokuma_groups: []
+autokuma_monitors: []
+autokuma_notification: {}
