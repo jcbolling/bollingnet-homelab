@@ -1,0 +1,252 @@
+---
+- name: Deploy AutoKuma
+  hosts: docker
+  become: true
+
+  pre_tasks:
+    - name: Load SOPS secrets
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/../vars/autokuma.sops.yaml"
+        name: autokuma_secrets
+      no_log: false
+
+  vars:
+    # Sensitive values — store these in a SOPS-encrypted vars file
+    # e.g. vars/secrets.sops.yml loaded via community.sops.load_vars
+    autokuma_kuma_username: "{{ autokuma_secrets.autokuma_kuma_username }}"
+    autokuma_kuma_password: "{{ autokuma_secrets.autokuma_kuma_password }}"
+    autokuma_kuma_notification_app_token: "{{ autokuma_secrets.autokuma_kuma_notification_app_token }}"
+    autokuma_kuma_notification_user_key: "{{ autokuma_secrets.autokuma_kuma_notification_user_key }}"
+
+    autokuma_groups:
+      - filename: group-docker
+        config:
+          type: group
+          name: Docker
+
+      - filename: group-kubernetes
+        config:
+          type: group
+          name: Kubernetes
+
+      - filename: group-internal-websites
+        config:
+          type: group
+          name: Internal Websites
+
+      - filename: group-proxmox
+        config:
+          type: group
+          name: Proxmox
+
+    autokuma_monitors:
+      - filename: monitor-ping-bn-docker-01
+        config:
+          type: ping
+          name: bn-docker-01.int.bollingnet.net (ping)
+          hostname: bn-docker-01.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-docker
+
+      - filename: monitor-ping-bn-docker-02
+        config:
+          type: ping
+          name: bn-docker-02.int.bollingnet.net (ping)
+          hostname: bn-docker-02.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-docker
+
+      - filename: monitor-ping-bn-docker-03
+        config:
+          type: ping
+          name: bn-docker-03.int.bollingnet.net (ping)
+          hostname: bn-docker-03.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-docker
+
+      - filename: monitor-ping-bn-prox-01
+        config:
+          type: ping
+          name: bn-prox-01.int.bollingnet.net (ping)
+          hostname: bn-prox-01.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-proxmox
+
+      - filename: monitor-ping-bn-prox-02
+        config:
+          type: ping
+          name: bn-prox-02.int.bollingnet.net (ping)
+          hostname: bn-prox-02.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-proxmox
+
+      - filename: monitor-ping-bn-kube-01
+        config:
+          type: ping
+          name: bn-kube-01.int.bollingnet.net (ping)
+          hostname: bn-kube-01.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-ping-bn-kube-02
+        config:
+          type: ping
+          name: bn-kube-02.int.bollingnet.net (ping)
+          hostname: bn-kube-02.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-ping-bn-kube-03
+        config:
+          type: ping
+          name: bn-kube-03.int.bollingnet.net (ping)
+          hostname: bn-kube-03.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-ping-bn-kube-04
+        config:
+          type: ping
+          name: bn-kube-04.int.bollingnet.net (ping)
+          hostname: bn-kube-04.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-ping-bn-kube-05
+        config:
+          type: ping
+          name: bn-kube-05.int.bollingnet.net (ping)
+          hostname: bn-kube-05.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-ping-bn-kube-06
+        config:
+          type: ping
+          name: bn-kube-06.int.bollingnet.net (ping)
+          hostname: bn-kube-06.int.bollingnet.net
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-port-k8s-api-server-vip
+        config:
+          type: port
+          name: Kubernetes API Server - HA VIP
+          hostname: 10.0.4.10
+          port: 6443
+          max_retries: 5
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-https-keyword-argocd-web-interface
+        config:
+          active: true
+          type: keyword
+          name: ArgoCD Web Interface
+          url: https://argocd.int.bollingnet.net
+          accepted_statuscodes: ["200-299"]
+          expiry_notification: true # Track and notify domain and SSL certificate expiry
+          keyword: Argo CD
+          ignore_tls: false
+          interval: 60
+          parent_name: group-internal-websites
+
+      - filename: monitor-https-keyword-authentik-web-interface
+        config:
+          active: true
+          type: keyword
+          name: Authentik Web Interface
+          url: https://authentik.int.bollingnet.net
+          accepted_statuscodes: ["200-299"]
+          expiry_notification: true # Track and notify domain and SSL certificate expiry
+          keyword: "Welcome to authentik!"
+          ignore_tls: false
+          interval: 60
+          parent_name: group-internal-websites
+
+      - filename: monitor-https-keyword-k8s-api-server-healthz-health-check-endpoint
+        config:
+          active: true
+          type: keyword
+          name: Kubernetes API Server - healthz health check endpoint
+          url: https://k8s-api.int.bollingnet.net:6443/healthz
+          accepted_statuscodes: ["200-299"]
+          keyword: ok
+          ignore_tls: true # Ignore self-signed cert on API server VIP
+          interval: 60
+          parent_name: group-kubernetes
+
+      - filename: monitor-https-keyword-proxmox-web-interface-bn-prox-01
+        config:
+          active: true
+          type: keyword
+          name: Proxmox Web Interface (bn-prox-01)
+          url: https://bn-prox-01.int.bollingnet.net:8006/
+          accepted_statuscodes: ["200-299"]
+          keyword: "Proxmox Virtual Environment"
+          ignore_tls: true # Ignore self-signed cert on API server VIP
+          interval: 60
+          parent_name: group-proxmox
+
+      - filename: monitor-https-keyword-proxmox-web-interface-bn-prox-02
+        config:
+          active: true
+          type: keyword
+          name: Proxmox Web Interface (bn-prox-02)
+          url: https://bn-prox-02.int.bollingnet.net:8006/
+          accepted_statuscodes: ["200-299"]
+          keyword: "Proxmox Virtual Environment"
+          ignore_tls: true # Ignore self-signed cert on API server VIP
+          interval: 60
+          parent_name: group-proxmox
+
+      - filename: monitor-https-keyword-meshcentral-web-interface
+        config:
+          active: true
+          type: keyword
+          name: MeshCentral Web Interface
+          url: https://bn-docker-02.int.bollingnet.net:8086/login
+          accepted_statuscodes: ["200-299"]
+          keyword: "MeshCentral - Login"
+          ignore_tls: true # Ignore self-signed cert on API server VIP
+          interval: 60
+          parent_name: group-internal-websites
+
+    #   - filename: k8s-etcd-01
+    #     config:
+    #       type: port
+    #       name: etcd Node 1
+    #       hostname: 192.168.1.11
+    #       port: 2379
+    #       interval: 60
+    #       parent_name: group-kubernetes
+
+    autokuma_notification:
+      type: notification
+      name: Pushover Alert
+      active: true
+      isDefault: true
+      applyExisting: true
+      config:
+        type: pushover
+        applyExisting: true
+        pushoverapptoken: "{{ autokuma_kuma_notification_app_token }}"
+        pushoverpriority: "2"
+        pushoversounds: pushover
+        pushovertitle: Uptime Kuma Alert
+        pushoverttl: 3600
+        pushoveruserkey: "{{ autokuma_kuma_notification_user_key }}"
+
+  roles:
+    - autokuma
